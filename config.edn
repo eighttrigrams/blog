@@ -1,0 +1,4 @@
+{:db {:type :sqlite-file
+      :path "data/blog.db"}
+ :port 3028
+ :dangerously-skip-logins? true}

@@ -1,0 +1,10 @@
+{:id "001-initial-schema"
+ :up ["CREATE TABLE IF NOT EXISTS articles (
+         article_id INTEGER NOT NULL,
+         title TEXT NOT NULL,
+         content TEXT NOT NULL DEFAULT '',
+         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+         PRIMARY KEY (article_id, created_at)
+       )"]
+ :down ["DROP TABLE IF EXISTS articles"]
+ :transactions false}

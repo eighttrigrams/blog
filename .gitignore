@@ -1,0 +1,6 @@
+target/
+data/
+.nrepl-port
+.cpcache/
+.backups/
+.env
