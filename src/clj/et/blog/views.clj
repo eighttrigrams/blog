@@ -187,17 +187,17 @@
         [:input {:type "text" :name "subtitle" :id "subtitle" :value (or (:subtitle article) "")}]]
        [:div.form-group
         [:label {:for "content"} "Content"]
-        [:textarea {:name "content" :id "content"} (hu/escape-html (or (:content article) ""))]]
+        [:textarea {:name "content" :id "content"} (or (:content article) "")]]
        [:div.form-group
         [:label {:for "footnotes"} "Footnotes"]
-        [:textarea {:name "footnotes" :id "footnotes"} (hu/escape-html (or (:footnotes article) ""))]]
+        [:textarea {:name "footnotes" :id "footnotes"} (or (:footnotes article) "")]]
        [:div.form-group
         [:label {:for "addenda"} "Addenda"]
-        [:textarea {:name "addenda" :id "addenda"} (hu/escape-html (or (:addenda article) ""))]]
+        [:textarea {:name "addenda" :id "addenda"} (or (:addenda article) "")]]
        [:details (when error {:open true})
         [:summary "Post content (required for publishing)"]
         [:div.form-group
-         [:textarea {:name "post-content" :id "post-content"} (hu/escape-html (or post-content ""))]]]])))
+         [:textarea {:name "post-content" :id "post-content"} (or post-content "")]]]])))
 
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}
@@ -239,7 +239,7 @@
          [:button.btn {:type "submit"} "Save"]]]
        [:div.form-group
         [:label {:for "content"} "Content"]
-        [:textarea {:name "content" :id "content"} (hu/escape-html (or (:content post) ""))]]
+        [:textarea {:name "content" :id "content"} (or (:content post) "")]]
       ])))
 
 (defn not-found-page [{:keys [logged-in?]}]
