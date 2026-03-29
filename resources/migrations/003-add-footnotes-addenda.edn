@@ -1,0 +1,6 @@
+{:id "003-add-footnotes-addenda"
+ :up ["ALTER TABLE articles ADD COLUMN footnotes TEXT NOT NULL DEFAULT ''"
+      "ALTER TABLE articles ADD COLUMN addenda TEXT NOT NULL DEFAULT ''"]
+ :down ["ALTER TABLE articles DROP COLUMN addenda"
+        "ALTER TABLE articles DROP COLUMN footnotes"]
+ :transactions false}

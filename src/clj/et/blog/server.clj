@@ -79,10 +79,12 @@
 
 (defn- article-handler [req]
   (let [id (Integer/parseInt (get-in req [:params :id]))
-        version-param (get-in req [:query-params "v"])
-        article (if version-param
-                  (db/get-article-version (ensure-ds) id version-param)
-                  (db/get-article (ensure-ds) id))]
+        as-of (get-in req [:params :as-of])
+        ver (get-in req [:params :version])
+        article (cond
+                  as-of (db/get-article-version (ensure-ds) id as-of)
+                  ver   (db/get-article-by-version (ensure-ds) id (Integer/parseInt ver))
+                  :else (db/get-article (ensure-ds) id))]
     (if article
       (let [versions (db/get-article-versions (ensure-ds) id)]
         (html-response 200
@@ -125,12 +127,17 @@
   (require-login req
     (fn [_]
       (let [title (str/trim (or (get-in req [:form-params "title"]) ""))
-            content (or (get-in req [:form-params "content"]) "")]
+            content (or (get-in req [:form-params "content"]) "")
+            footnotes (or (get-in req [:form-params "footnotes"]) "")
+            addenda (or (get-in req [:form-params "addenda"]) "")
+            publish? (some? (get-in req [:form-params "publish"]))]
         (if (str/blank? title)
           (html-response 400
             (views/edit-page {:new? true :logged-in? true
-                              :article {:title title :content content}}))
-          (let [article-id (db/create-article! (ensure-ds) title content)]
+                              :article {:title title :content content :footnotes footnotes :addenda addenda}}))
+          (let [article-id (db/create-article! (ensure-ds) {:title title :content content
+                                                             :footnotes footnotes :addenda addenda
+                                                             :publish? publish?})]
             (redirect (str "/articles/" article-id))))))))
 
 (defn- edit-article-handler [req]
@@ -149,12 +156,17 @@
     (fn [_]
       (let [id (Integer/parseInt (get-in req [:params :id]))
             title (str/trim (or (get-in req [:form-params "title"]) ""))
-            content (or (get-in req [:form-params "content"]) "")]
+            content (or (get-in req [:form-params "content"]) "")
+            footnotes (or (get-in req [:form-params "footnotes"]) "")
+            addenda (or (get-in req [:form-params "addenda"]) "")
+            publish? (some? (get-in req [:form-params "publish"]))]
         (if (str/blank? title)
           (html-response 400
-            (views/edit-page {:article {:article_id id :title title :content content} :logged-in? true}))
+            (views/edit-page {:article {:article_id id :title title :content content :footnotes footnotes :addenda addenda} :logged-in? true}))
           (do
-            (db/update-article! (ensure-ds) id title content)
+            (db/update-article! (ensure-ds) id {:title title :content content
+                                                 :footnotes footnotes :addenda addenda
+                                                 :publish? publish?})
             (redirect (str "/articles/" id))))))))
 
 (defn- wrap-cookies [handler]
@@ -173,6 +185,8 @@
   (GET "/logout" [] logout-handler)
   (GET "/articles/new" [] new-article-handler)
   (POST "/articles" [] create-article-handler)
+  (GET ["/articles/:id/as-of/:as-of" :as-of #".*"] [] article-handler)
+  (GET "/articles/:id/version/:version" [] article-handler)
   (GET "/articles/:id" [] article-handler)
   (GET "/articles/:id/edit" [] edit-article-handler)
   (POST "/articles/:id" [] update-article-handler)

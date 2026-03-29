@@ -29,30 +29,50 @@
                  jdbc-opts)]
     (inc (first (vals result)))))
 
-(defn create-article! [ds title content]
+(defn create-article! [ds {:keys [title content footnotes addenda publish?]}]
   (let [conn (get-conn ds)
-        article-id (next-article-id ds)]
+        article-id (next-article-id ds)
+        version (if publish? 1 0)]
     (jdbc/execute-one! conn
       (sql/format {:insert-into :articles
                    :values [{:article_id article-id
                              :title title
-                             :content content}]})
+                             :content content
+                             :footnotes (or footnotes "")
+                             :addenda (or addenda "")
+                             :version version}]})
       jdbc-opts)
     article-id))
 
-(defn update-article! [ds article-id title content]
-  (let [conn (get-conn ds)]
+(defn- current-version [ds article-id]
+  (let [conn (get-conn ds)
+        result (jdbc/execute-one! conn
+                 (sql/format {:select [:version]
+                              :from [:articles]
+                              :where [:= :article_id article-id]
+                              :order-by [[:created_at :desc]]
+                              :limit 1})
+                 jdbc-opts)]
+    (or (:version result) 0)))
+
+(defn update-article! [ds article-id {:keys [title content footnotes addenda publish?]}]
+  (let [conn (get-conn ds)
+        cur (current-version ds article-id)
+        version (if publish? (inc cur) cur)]
     (jdbc/execute-one! conn
       (sql/format {:insert-into :articles
                    :values [{:article_id article-id
                              :title title
-                             :content content}]})
+                             :content content
+                             :footnotes (or footnotes "")
+                             :addenda (or addenda "")
+                             :version version}]})
       jdbc-opts)))
 
 (defn list-articles [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      ["SELECT a.article_id, a.title, a.content, a.created_at
+      ["SELECT a.article_id, a.title, a.content, a.footnotes, a.addenda, a.created_at, a.version
         FROM articles a
         INNER JOIN (
           SELECT article_id, MAX(created_at) AS max_created_at
@@ -65,25 +85,37 @@
 (defn get-article [ds article-id]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      (sql/format {:select [:article_id :title :content :created_at]
+      (sql/format {:select [:article_id :title :content :footnotes :addenda :created_at :version]
                    :from [:articles]
                    :where [:= :article_id article-id]
                    :order-by [[:created_at :desc]]
                    :limit 1})
       jdbc-opts)))
 
-(defn get-article-version [ds article-id created-at]
+(defn get-article-version [ds article-id as-of]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      (sql/format {:select [:article_id :title :content :created_at]
+      (sql/format {:select [:article_id :title :content :footnotes :addenda :created_at :version]
                    :from [:articles]
-                   :where [:and [:= :article_id article-id] [:= :created_at created-at]]})
+                   :where [:and [:= :article_id article-id] [:<= :created_at as-of]]
+                   :order-by [[:created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-article-by-version [ds article-id version]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:select [:article_id :title :content :footnotes :addenda :created_at :version]
+                   :from [:articles]
+                   :where [:and [:= :article_id article-id] [:= :version version]]
+                   :order-by [[:created_at :desc]]
+                   :limit 1})
       jdbc-opts)))
 
 (defn get-article-versions [ds article-id]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      (sql/format {:select [:article_id :title :content :created_at]
+      (sql/format {:select [:article_id :title :content :footnotes :addenda :created_at :version]
                    :from [:articles]
                    :where [:= :article_id article-id]
                    :order-by [[:created_at :desc]]})

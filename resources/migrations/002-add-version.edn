@@ -1,0 +1,4 @@
+{:id "002-add-version"
+ :up ["ALTER TABLE articles ADD COLUMN version INTEGER NOT NULL DEFAULT 0"]
+ :down ["ALTER TABLE articles DROP COLUMN version"]
+ :transactions false}
