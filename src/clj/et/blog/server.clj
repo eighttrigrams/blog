@@ -9,6 +9,7 @@
             [compojure.core :refer [defroutes GET POST]]
             [compojure.route :as route]
             [ring.middleware.params :refer [wrap-params]]
+            [et.blog.middleware.rate-limit :refer [wrap-rate-limit]]
             [nrepl.server :as nrepl]
             [taoensso.telemere :as tel])
   (:gen-class))
@@ -178,15 +179,17 @@
   (route/resources "/")
   (route/not-found (fn [_] (html-response 404 (views/not-found-page {:logged-in? false})))))
 
-(defn- app []
+(defn- app [prod?]
   (-> app-routes
       wrap-params
-      wrap-cookies))
+      wrap-cookies
+      (wrap-rate-limit (env-int "RATE_LIMIT_MAX_REQUESTS" (if prod? 180 720))
+                       (env-int "RATE_LIMIT_WINDOW_SECONDS" 60))))
 
 (defn- run-server [port]
   (let [host (or (System/getenv "HOST") "127.0.0.1")]
     (tel/log! :info (str "Binding to " host ":" port))
-    (jetty/run-jetty (app) {:port port :host host :join? false})))
+    (jetty/run-jetty (app (prod-mode?)) {:port port :host host :join? false})))
 
 (defn -main [& _args]
   (reset! *config (load-config))
