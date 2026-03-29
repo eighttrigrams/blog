@@ -13,6 +13,10 @@
       [:link {:rel "preconnect" :href "https://fonts.googleapis.com"}]
       [:link {:rel "preconnect" :href "https://fonts.gstatic.com" :crossorigin ""}]
       [:link {:rel "stylesheet" :href "https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400;1,600&display=swap"}]
+      [:link {:rel "stylesheet" :href "/vendor/hljs/github.min.css"}]
+      [:script {:src "/vendor/hljs/highlight.min.js"}]
+      [:script {:src "/vendor/hljs/clojure.min.js"}]
+      [:script "hljs.highlightAll();"]
       [:style
        "*, *::before, *::after { box-sizing: border-box; }
         body { font-family: Spectral, Georgia, serif; max-width: 728px; margin: 0 auto; padding: 1.5rem; line-height: 1.8; color: rgba(0,0,0,0.8); font-size: 1.125rem; }
