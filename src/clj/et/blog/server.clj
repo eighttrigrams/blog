@@ -142,6 +142,7 @@
   (require-login req
     (fn [_]
       (let [title (str/trim (or (get-in req [:form-params "title"]) ""))
+            subtitle (or (get-in req [:form-params "subtitle"]) "")
             content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             addenda (or (get-in req [:form-params "addenda"]) "")
@@ -149,8 +150,8 @@
         (if (str/blank? title)
           (html-response 400
             (views/edit-page {:new? true :logged-in? true
-                              :article {:title title :content content :footnotes footnotes :addenda addenda}}))
-          (let [article-id (db/create-article! (ensure-ds) {:title title :content content
+                              :article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda}}))
+          (let [article-id (db/create-article! (ensure-ds) {:title title :subtitle subtitle :content content
                                                              :footnotes footnotes :addenda addenda
                                                              :publish? publish?})]
             (redirect (str "/articles/" article-id))))))))
@@ -171,15 +172,16 @@
     (fn [_]
       (let [id (Integer/parseInt (get-in req [:params :id]))
             title (str/trim (or (get-in req [:form-params "title"]) ""))
+            subtitle (or (get-in req [:form-params "subtitle"]) "")
             content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             addenda (or (get-in req [:form-params "addenda"]) "")
             publish? (some? (get-in req [:form-params "publish"]))]
         (if (str/blank? title)
           (html-response 400
-            (views/edit-page {:article {:article_id id :title title :content content :footnotes footnotes :addenda addenda} :logged-in? true}))
+            (views/edit-page {:article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda} :logged-in? true}))
           (do
-            (db/update-article! (ensure-ds) id {:title title :content content
+            (db/update-article! (ensure-ds) id {:title title :subtitle subtitle :content content
                                                  :footnotes footnotes :addenda addenda
                                                  :publish? publish?})
             (redirect (str "/articles/" id))))))))

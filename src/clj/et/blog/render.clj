@@ -26,7 +26,7 @@
     (->> (str/split-lines footnotes-text)
          (keep (fn [line]
                  (let [trimmed (str/trim line)]
-                   (when-let [[_ id text] (re-matches #"FOOTNOTE:([a-zA-Z0-9_-]+)\s+(.*)" trimmed)]
+                   (when-let [[_ id text] (re-matches #"-?\s*FOOTNOTE:([a-zA-Z0-9_-]+)\s+(.*)" trimmed)]
                      [id text]))))
          (into {}))))
 

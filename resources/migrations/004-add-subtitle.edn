@@ -1,0 +1,4 @@
+{:id "004-add-subtitle"
+ :up ["ALTER TABLE articles ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''"]
+ :down ["ALTER TABLE articles DROP COLUMN subtitle"]
+ :transactions false}

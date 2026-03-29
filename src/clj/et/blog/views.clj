@@ -23,6 +23,7 @@
         nav a:hover { color: #FD5353; }
         h1 { font-size: 2rem; font-weight: 600; line-height: 1.3; margin-bottom: 0.5rem; }
         h2 { font-size: 1.5rem; font-weight: 600; line-height: 1.3; }
+        .subtitle { font-size: 1.2rem; color: rgba(0,0,0,0.5); margin-top: -0.5rem; margin-bottom: 0.5rem; }
         .article-list { list-style: none; padding: 0; }
         .article-list li { margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
         .article-list li:last-child { border-bottom: none; }
@@ -103,10 +104,12 @@
        [:span.version-arrow.disabled "\u2192"])]))
 
 (defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda]}]
-  (let [{:keys [article_id title created_at version]} article]
+  (let [{:keys [article_id title subtitle created_at version]} article]
     (layout {:title title :logged-in? logged-in?}
       [:article
        [:h1 (hu/escape-html title)]
+       (when (and subtitle (not= subtitle ""))
+         [:p.subtitle (hu/escape-html subtitle)])
        (if (> (count versions) 1)
          (version-nav article_id (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
@@ -144,6 +147,9 @@
        [:div.form-group
         [:label {:for "title"} "Title"]
         [:input {:type "text" :name "title" :id "title" :value (or (:title article) "") :required true}]]
+       [:div.form-group
+        [:label {:for "subtitle"} "Subtitle"]
+        [:input {:type "text" :name "subtitle" :id "subtitle" :value (or (:subtitle article) "")}]]
        [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content"} (hu/escape-html (or (:content article) ""))]]

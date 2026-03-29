@@ -29,7 +29,7 @@
                  jdbc-opts)]
     (inc (first (vals result)))))
 
-(defn create-article! [ds {:keys [title content footnotes addenda publish?]}]
+(defn create-article! [ds {:keys [title subtitle content footnotes addenda publish?]}]
   (let [conn (get-conn ds)
         article-id (next-article-id ds)
         version (if publish? 1 0)]
@@ -37,6 +37,7 @@
       (sql/format {:insert-into :articles
                    :values [{:article_id article-id
                              :title title
+                             :subtitle (or subtitle "")
                              :content content
                              :footnotes (or footnotes "")
                              :addenda (or addenda "")
@@ -55,7 +56,7 @@
                  jdbc-opts)]
     (or (:version result) 0)))
 
-(defn update-article! [ds article-id {:keys [title content footnotes addenda publish?]}]
+(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda publish?]}]
   (let [conn (get-conn ds)
         cur (current-version ds article-id)
         version (if publish? (inc cur) cur)]
@@ -63,19 +64,20 @@
       (sql/format {:insert-into :articles
                    :values [{:article_id article-id
                              :title title
+                             :subtitle (or subtitle "")
                              :content content
                              :footnotes (or footnotes "")
                              :addenda (or addenda "")
                              :version version}]})
       jdbc-opts)))
 
-(def ^:private article-cols [:article_id :title :content :footnotes :addenda :created_at :version])
+(def ^:private article-cols [:article_id :title :subtitle :content :footnotes :addenda :created_at :version])
 
 (defn list-articles [ds {:keys [published-only?]}]
   (let [conn (get-conn ds)]
     (if published-only?
       (jdbc/execute! conn
-        ["SELECT a.article_id, a.title, a.content, a.footnotes, a.addenda, a.created_at, a.version
+        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.created_at, a.version
           FROM articles a
           INNER JOIN (
             SELECT article_id, MAX(created_at) AS max_created_at
@@ -86,7 +88,7 @@
           ORDER BY a.created_at DESC"]
         jdbc-opts)
       (jdbc/execute! conn
-        ["SELECT a.article_id, a.title, a.content, a.footnotes, a.addenda, a.created_at, a.version
+        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.created_at, a.version
           FROM articles a
           INNER JOIN (
             SELECT article_id, MAX(created_at) AS max_created_at
