@@ -1,6 +1,15 @@
 (ns et.blog.views
   (:require [hiccup2.core :as h]
-            [hiccup.util :as hu]))
+            [hiccup.util :as hu])
+  (:import [java.time LocalDateTime]
+           [java.time.format DateTimeFormatter]))
+
+(def ^:private human-date-fmt (DateTimeFormatter/ofPattern "MMMM d, yyyy"))
+
+(defn- human-date [datetime-str]
+  (when datetime-str
+    (let [dt (LocalDateTime/parse datetime-str (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
+      (.format dt human-date-fmt))))
 
 (defn layout [{:keys [title logged-in?]} & body]
   (str
@@ -39,7 +48,8 @@
         .post-list li:last-child { border-bottom: none; }
         .post-list a { color: rgba(0,0,0,0.8); }
         .post-list a:hover { color: #FD5353; }
-        .post-preview { display: block; white-space: pre-wrap; }
+        .post-heading { display: flex; justify-content: space-between; align-items: center; }
+        .post-heading h2 { margin: 0; }
         .article-content { margin-top: 1.5rem; }
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
         .article-content code { background: rgba(0,0,0,0.05); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
@@ -79,12 +89,12 @@
      [:body
       [:nav
        [:div
-        [:a {:href "/"} "Blog"]
         [:a {:href "/posts"} "Posts"]
+        [:a {:href "/"} "Articles"]
         (when logged-in?
           (list
-            [:a {:href "/articles/new"} "New Article"]
-            [:a {:href "/posts/new"} "New Post"]))]
+            [:a {:href "/posts/new"} "New Post"]
+            [:a {:href "/articles/new"} "New Article"]))]
        [:div
         (if logged-in?
           [:a {:href "/logout"} "Logout"]
@@ -179,12 +189,13 @@
     [:h1 "Posts"]
     (if (seq posts)
       [:ul.post-list
-       (for [{:keys [post_id content created_at first_at]} posts]
-         (let [preview (let [s (or content "")] (if (> (count s) 200) (str (subs s 0 200) "...") s))]
-           [:li
-            [:a {:href (str "/posts/" post_id)}
-             [:span.post-preview (hu/escape-html preview)]]
-            [:span.article-date (or first_at created_at)]]))]
+       (for [{:keys [post_id created_at first_at rendered-content]} posts]
+         [:li
+          [:div.post-heading
+           [:h2 (human-date (or first_at created_at))]
+           (when logged-in?
+             [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"])]
+          [:div.article-content (h/raw rendered-content)]])]
       [:p "No posts yet."])))
 
 (defn post-page [{:keys [post versions logged-in? current-version rendered-content]}]
@@ -209,9 +220,7 @@
        [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content"} (hu/escape-html (or (:content post) ""))]]
-       [:div.form-group
-        [:label {:for "footnotes"} "Footnotes"]
-        [:textarea {:name "footnotes" :id "footnotes"} (hu/escape-html (or (:footnotes post) ""))]]])))
+      ])))
 
 (defn not-found-page [{:keys [logged-in?]}]
   (layout {:title "Not Found" :logged-in? logged-in?}

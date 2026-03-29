@@ -190,7 +190,9 @@
 
 (defn- posts-handler [req]
   (let [auth? (logged-in? req)
-        posts (db/list-posts (ensure-ds))]
+        fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
+        posts (->> (db/list-posts (ensure-ds))
+                   (mapv #(assoc % :rendered-content (render/render-content % fetch-fn))))]
     (html-response 200
       (views/posts-page {:posts posts :logged-in? auth?}))))
 
