@@ -1,4 +1,4 @@
-app = "blog-CHANGEME"
+app = "blog-55lf6w"
 primary_region = "cdg"
 
 [env]
@@ -23,7 +23,7 @@ primary_region = "cdg"
   destination = "/app/data"
 
 [[vm]]
-  memory = "256mb"
+  memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
   count = 1

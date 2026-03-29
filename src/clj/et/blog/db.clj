@@ -72,6 +72,14 @@
                    :limit 1})
       jdbc-opts)))
 
+(defn get-article-version [ds article-id created-at]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:select [:article_id :title :content :created_at]
+                   :from [:articles]
+                   :where [:and [:= :article_id article-id] [:= :created_at created-at]]})
+      jdbc-opts)))
+
 (defn get-article-versions [ds article-id]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn

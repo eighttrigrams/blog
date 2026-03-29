@@ -78,11 +78,15 @@
 
 (defn- article-handler [req]
   (let [id (Integer/parseInt (get-in req [:params :id]))
-        article (db/get-article (ensure-ds) id)]
+        version-param (get-in req [:query-params "v"])
+        article (if version-param
+                  (db/get-article-version (ensure-ds) id version-param)
+                  (db/get-article (ensure-ds) id))]
     (if article
-      (let [versions (when (logged-in? req) (db/get-article-versions (ensure-ds) id))]
+      (let [versions (db/get-article-versions (ensure-ds) id)]
         (html-response 200
-          (views/article-page {:article article :versions versions :logged-in? (logged-in? req)})))
+          (views/article-page {:article article :versions versions :logged-in? (logged-in? req)
+                               :current-version (:created_at article)})))
       (html-response 404
         (views/not-found-page {:logged-in? (logged-in? req)})))))
 
