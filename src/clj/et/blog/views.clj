@@ -57,6 +57,10 @@
         .edit-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
         .edit-heading h1 { margin: 0; }
         .edit-actions { display: flex; gap: 0.75rem; flex-shrink: 0; }
+        .version-nav { display: flex; align-items: center; gap: 0.5rem; }
+        .version-arrow { text-decoration: none; color: rgba(0,0,0,0.4); font-size: 1.1rem; padding: 0 0.2rem; }
+        .version-arrow:hover { color: #FD5353; text-decoration: none; }
+        .version-arrow.disabled { color: rgba(0,0,0,0.15); cursor: default; }
         .versions { margin-top: 2.5rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem; }
         .versions h3 { font-size: 1rem; font-weight: 600; color: rgba(0,0,0,0.6); }
         .versions ul { padding-left: 1.5rem; }
@@ -84,12 +88,28 @@
           [:span.article-date created_at]])]
       [:p "No articles yet."])))
 
+(defn- version-nav [article_id created_at versions]
+  (let [sorted (sort-by :created_at versions)
+        idx (.indexOf (mapv :created_at sorted) created_at)
+        prev-v (when (pos? idx) (nth sorted (dec idx)))
+        next-v (when (< idx (dec (count sorted))) (nth sorted (inc idx)))]
+    [:div.version-nav
+     (if prev-v
+       [:a.version-arrow {:href (str "/articles/" article_id "/as-of/" (:created_at prev-v))} "\u2190"]
+       [:span.version-arrow.disabled "\u2190"])
+     [:span.article-date created_at]
+     (if next-v
+       [:a.version-arrow {:href (str "/articles/" article_id "/as-of/" (:created_at next-v))} "\u2192"]
+       [:span.version-arrow.disabled "\u2192"])]))
+
 (defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda]}]
   (let [{:keys [article_id title created_at version]} article]
     (layout {:title title :logged-in? logged-in?}
       [:article
        [:h1 (hu/escape-html title)]
-       [:span.article-date created_at]
+       (if (> (count versions) 1)
+         (version-nav article_id (or current-version created_at) versions)
+         [:div.version-nav [:span.article-date created_at]])
        (if (and version (pos? version))
          [:span.version-badge (str "v" version)]
          (when logged-in? [:span.version-badge.draft "draft"]))
@@ -99,20 +119,7 @@
        (when rendered-addenda
          [:div.article-section
           [:h3 "Addenda"]
-          [:div.article-content (h/raw rendered-addenda)]])]
-      (when (> (count versions) 1)
-        [:div.versions
-         [:h3 "Version history"]
-         [:ul
-          (for [v versions]
-            (let [active? (= (:created_at v) (or current-version created_at))]
-              [:li
-               (if active?
-                 [:strong (:created_at v) " - " (hu/escape-html (:title v))
-                  (when (pos? (:version v)) (str " (v" (:version v) ")"))]
-                 [:a {:href (str "/articles/" article_id "/as-of/" (:created_at v))}
-                  (:created_at v) " - " (hu/escape-html (:title v))
-                  (when (pos? (:version v)) (str " (v" (:version v) ")"))])]))]]))))
+          [:div.article-content (h/raw rendered-addenda)]])])))
 
 (defn login-page [{:keys [error]}]
   (layout {:title "Login"}
