@@ -50,6 +50,7 @@
         .post-list a:hover { color: #FD5353; }
         .post-heading { display: flex; justify-content: space-between; align-items: center; }
         .post-heading h2 { margin: 0; }
+        .post-article-link { margin-top: 0.75rem; font-weight: 600; }
         .article-content { margin-top: 1.5rem; }
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
         .article-content code { background: rgba(0,0,0,0.05); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
@@ -159,9 +160,11 @@
       [:input {:type "password" :name "password" :id "password" :autofocus true}]]
      [:button.btn {:type "submit"} "Login"]]))
 
-(defn edit-page [{:keys [article logged-in? new?]}]
+(defn edit-page [{:keys [article logged-in? new? error post-content]}]
   (let [action (if new? "/articles" (str "/articles/" (:article_id article)))]
     (layout {:title (if new? "New Article" "Edit Article") :logged-in? logged-in?}
+      (when error
+        [:p.error error])
       [:form {:method "POST" :action action}
        [:div.edit-heading
         [:h1 (if new? "New Article" "Edit Article")]
@@ -182,20 +185,29 @@
         [:textarea {:name "footnotes" :id "footnotes"} (hu/escape-html (or (:footnotes article) ""))]]
        [:div.form-group
         [:label {:for "addenda"} "Addenda"]
-        [:textarea {:name "addenda" :id "addenda"} (hu/escape-html (or (:addenda article) ""))]]])))
+        [:textarea {:name "addenda" :id "addenda"} (hu/escape-html (or (:addenda article) ""))]]
+       [:details (when error {:open true})
+        [:summary "Post content (required for publishing)"]
+        [:div.form-group
+         [:textarea {:name "post-content" :id "post-content"} (hu/escape-html (or post-content ""))]]]])))
 
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}
     [:h1 "Posts"]
     (if (seq posts)
       [:ul.post-list
-       (for [{:keys [post_id created_at first_at rendered-content]} posts]
+       (for [{:keys [post_id created_at first_at rendered-content article-link]} posts]
          [:li
           [:div.post-heading
            [:h2 (human-date (or first_at created_at))]
            (when logged-in?
              [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"])]
-          [:div.article-content (h/raw rendered-content)]])]
+          [:div.article-content (h/raw rendered-content)]
+          (when article-link
+            [:p.post-article-link
+             [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
+              (hu/escape-html (:title article-link))
+              " \u2192"]])])]
       [:p "No posts yet."])))
 
 (defn post-page [{:keys [post versions logged-in? current-version rendered-content]}]

@@ -1,0 +1,9 @@
+{:id "006-add-article-post-relation"
+ :up ["CREATE TABLE IF NOT EXISTS article_posts (
+         article_id INTEGER NOT NULL,
+         article_version INTEGER NOT NULL,
+         post_id INTEGER NOT NULL,
+         UNIQUE(article_id, article_version)
+       )"]
+ :down ["DROP TABLE IF EXISTS article_posts"]
+ :transactions false}

@@ -146,14 +146,23 @@
             content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             addenda (or (get-in req [:form-params "addenda"]) "")
-            publish? (some? (get-in req [:form-params "publish"]))]
-        (if (str/blank? title)
+            post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
+            publish? (some? (get-in req [:form-params "publish"]))
+            article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda}]
+        (cond
+          (str/blank? title)
           (html-response 400
-            (views/edit-page {:new? true :logged-in? true
-                              :article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda}}))
-          (let [article-id (db/create-article! (ensure-ds) {:title title :subtitle subtitle :content content
-                                                             :footnotes footnotes :addenda addenda
-                                                             :publish? publish?})]
+            (views/edit-page {:new? true :logged-in? true :article article}))
+
+          (and publish? (str/blank? post-content))
+          (html-response 400
+            (views/edit-page {:new? true :logged-in? true :article article
+                              :error "Post content is required when publishing."
+                              :post-content post-content}))
+
+          :else
+          (let [article-id (db/create-article! (ensure-ds) (merge article {:publish? publish?
+                                                                            :post-content (when publish? post-content)}))]
             (redirect (str "/articles/" article-id))))))))
 
 (defn- edit-article-handler [req]
@@ -176,14 +185,24 @@
             content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             addenda (or (get-in req [:form-params "addenda"]) "")
-            publish? (some? (get-in req [:form-params "publish"]))]
-        (if (str/blank? title)
+            post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
+            publish? (some? (get-in req [:form-params "publish"]))
+            article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda}]
+        (cond
+          (str/blank? title)
           (html-response 400
-            (views/edit-page {:article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda} :logged-in? true}))
+            (views/edit-page {:article article :logged-in? true}))
+
+          (and publish? (str/blank? post-content))
+          (html-response 400
+            (views/edit-page {:article article :logged-in? true
+                              :error "Post content is required when publishing."
+                              :post-content post-content}))
+
+          :else
           (do
-            (db/update-article! (ensure-ds) id {:title title :subtitle subtitle :content content
-                                                 :footnotes footnotes :addenda addenda
-                                                 :publish? publish?})
+            (db/update-article! (ensure-ds) id (merge article {:publish? publish?
+                                                                :post-content (when publish? post-content)}))
             (redirect (str "/articles/" id))))))))
 
 ;; --- Posts ---
@@ -191,8 +210,13 @@
 (defn- posts-handler [req]
   (let [auth? (logged-in? req)
         fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
-        posts (->> (db/list-posts (ensure-ds))
-                   (mapv #(assoc % :rendered-content (render/render-content % fetch-fn))))]
+        posts (db/list-posts (ensure-ds))
+        post-ids (mapv :post_id posts)
+        article-links (db/get-posts-article-links (ensure-ds) post-ids)
+        posts (->> posts
+                   (mapv #(assoc %
+                            :rendered-content (render/render-content % fetch-fn)
+                            :article-link (get article-links (:post_id %)))))]
     (html-response 200
       (views/posts-page {:posts posts :logged-in? auth?}))))
 

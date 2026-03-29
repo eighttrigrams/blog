@@ -21,6 +21,8 @@
 (defn get-conn [ds]
   (if (map? ds) (:conn ds) ds))
 
+(declare next-post-id)
+
 (defn next-article-id [ds]
   (let [conn (get-conn ds)
         result (jdbc/execute-one! conn
@@ -29,7 +31,7 @@
                  jdbc-opts)]
     (inc (first (vals result)))))
 
-(defn create-article! [ds {:keys [title subtitle content footnotes addenda publish?]}]
+(defn create-article! [ds {:keys [title subtitle content footnotes addenda publish? post-content]}]
   (let [conn (get-conn ds)
         article-id (next-article-id ds)
         version (if publish? 1 0)]
@@ -43,6 +45,20 @@
                              :addenda (or addenda "")
                              :version version}]})
       jdbc-opts)
+    (when (and publish? post-content)
+      (let [post-id (next-post-id ds)]
+        (jdbc/execute-one! conn
+          (sql/format {:insert-into :posts
+                       :values [{:post_id post-id
+                                 :content post-content
+                                 :footnotes ""}]})
+          jdbc-opts)
+        (jdbc/execute-one! conn
+          (sql/format {:insert-into :article_posts
+                       :values [{:article_id article-id
+                                 :article_version version
+                                 :post_id post-id}]})
+          jdbc-opts)))
     article-id))
 
 (defn- current-version [ds article-id]
@@ -56,7 +72,7 @@
                  jdbc-opts)]
     (or (:version result) 0)))
 
-(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda publish?]}]
+(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda publish? post-content]}]
   (let [conn (get-conn ds)
         cur (current-version ds article-id)
         version (if publish? (inc cur) cur)]
@@ -69,7 +85,21 @@
                              :footnotes (or footnotes "")
                              :addenda (or addenda "")
                              :version version}]})
-      jdbc-opts)))
+      jdbc-opts)
+    (when (and publish? post-content)
+      (let [post-id (next-post-id ds)]
+        (jdbc/execute-one! conn
+          (sql/format {:insert-into :posts
+                       :values [{:post_id post-id
+                                 :content post-content
+                                 :footnotes ""}]})
+          jdbc-opts)
+        (jdbc/execute-one! conn
+          (sql/format {:insert-into :article_posts
+                       :values [{:article_id article-id
+                                 :article_version version
+                                 :post_id post-id}]})
+          jdbc-opts)))))
 
 (def ^:private article-cols [:article_id :title :subtitle :content :footnotes :addenda :created_at :version])
 
@@ -214,3 +244,31 @@
                    :where [:= :post_id post-id]
                    :order-by [[:created_at :desc]]})
       jdbc-opts)))
+
+(defn get-post-article-link [ds post-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:select [:ap.article_id :ap.article_version :a.title]
+                   :from [[:article_posts :ap]]
+                   :join [[:articles :a] [:and
+                                          [:= :a.article_id :ap.article_id]
+                                          [:= :a.version :ap.article_version]]]
+                   :where [:= :ap.post_id post-id]
+                   :order-by [[:a.created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-posts-article-links [ds post-ids]
+  (if (empty? post-ids)
+    {}
+    (let [conn (get-conn ds)
+          rows (jdbc/execute! conn
+                 (sql/format {:select [:ap.post_id :ap.article_id :ap.article_version :a.title]
+                              :from [[:article_posts :ap]]
+                              :join [[:articles :a] [:and
+                                                     [:= :a.article_id :ap.article_id]
+                                                     [:= :a.version :ap.article_version]]]
+                              :where [:in :ap.post_id post-ids]
+                              :order-by [[:a.created_at :desc]]})
+                 jdbc-opts)]
+      (into {} (map (fn [r] [(:post_id r) r]) rows)))))
