@@ -10,10 +10,15 @@
 (def ^:private md-parser (.build (Parser/builder md-options)))
 (def ^:private md-renderer (.build (HtmlRenderer/builder md-options)))
 
+(defn- externalize-links [html]
+  (str/replace html #"<a href=\"(https?://[^\"]+)\""
+    (fn [[_ url]]
+      (str "<a href=\"" url "\" target=\"_blank\" rel=\"noopener\""))))
+
 (defn markdown->html [text]
   (when (and text (not (str/blank? text)))
     (let [doc (.parse md-parser text)]
-      (.render md-renderer doc))))
+      (externalize-links (.render md-renderer doc)))))
 
 (def ^:private footnote-ref-pattern #"FOOTNOTE:([a-zA-Z0-9_-]+)")
 (def ^:private cite-pattern #"CITE:(\d+):(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}):(\d+):(\d+)")
@@ -80,6 +85,6 @@
         processed (-> content
                       (resolve-citations fetch-fn)
                       (replace-footnote-refs ref-order def-map))
-        html (markdown->html processed)
+        html (or (markdown->html processed) "")
         footnotes-html (render-footnotes-html ref-ids def-map)]
-    (str (or html "") (or footnotes-html ""))))
+    (str html (or footnotes-html ""))))

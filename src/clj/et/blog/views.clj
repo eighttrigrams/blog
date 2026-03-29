@@ -29,8 +29,9 @@
       [:style
        "*, *::before, *::after { box-sizing: border-box; }
         body { font-family: Spectral, Georgia, serif; max-width: 728px; margin: 0 auto; padding: 1.5rem; line-height: 1.8; color: rgba(0,0,0,0.8); font-size: 1.125rem; }
-        a { color: #FD5353; text-decoration: none; }
+        a { color: #1a0dab; text-decoration: none; }
         a:hover { text-decoration: underline; }
+        a:visited { color: #1a0dab; }
         nav { border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 0.75rem; margin-bottom: 2.5rem; display: flex; justify-content: space-between; align-items: center; }
         nav a { color: rgba(0,0,0,0.8); margin-right: 1.25rem; }
         nav a:hover { color: #FD5353; }
@@ -64,7 +65,7 @@
         .footnotes h3 { font-size: 1rem; font-weight: 600; color: rgba(0,0,0,0.6); }
         .footnotes ol { padding-left: 1.5rem; font-size: 0.95rem; color: rgba(0,0,0,0.7); }
         .footnotes li { margin-bottom: 0.3rem; }
-        sup a { color: #FD5353; text-decoration: none; }
+        sup a { color: #1a0dab; text-decoration: none; }
         sup.missing { color: #c00; font-size: 0.75rem; }
         .btn { display: inline-block; padding: 0.4rem 1rem; background: #FD5353; color: #fff; text-decoration: none; border: none; border-radius: 3px; cursor: pointer; font-size: 1rem; font-family: inherit; }
         .btn:hover { background: #e04848; text-decoration: none; }
