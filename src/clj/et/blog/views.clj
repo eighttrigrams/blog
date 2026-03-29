@@ -1,5 +1,6 @@
 (ns et.blog.views
-  (:require [hiccup2.core :as h]
+  (:require [clojure.string :as str]
+            [hiccup2.core :as h]
             [hiccup.util :as hu])
   (:import [java.time LocalDateTime]
            [java.time.format DateTimeFormatter]))
@@ -144,13 +145,18 @@
        [:a.version-arrow {:href (str base-path eid "/as-of/" (:created_at next-v))} "\u2192"]
        [:span.version-arrow.disabled "\u2192"])]))
 
+(defn- word-count [text]
+  (if (str/blank? text) 0
+    (count (str/split (str/trim text) #"\s+"))))
+
 (defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda]}]
-  (let [{:keys [article_id title subtitle created_at version]} article]
+  (let [{:keys [article_id title subtitle created_at version content]} article]
     (layout {:title title :logged-in? logged-in?}
       [:article
        [:h1 (hu/escape-html title)]
        (when (and subtitle (not= subtitle ""))
          [:p.subtitle (hu/escape-html subtitle)])
+       [:p.word-count (str (word-count content) " words")]
        (if (> (count versions) 1)
          (version-nav "/articles/" :article_id article (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
@@ -205,7 +211,7 @@
         [:label {:for "addenda"} "Addenda"]
         [:textarea {:name "addenda" :id "addenda"} (or (:addenda article) "")]]
        [:details (when error {:open true})
-        [:summary "Post content (required for publishing)"]
+        [:summary "Post content (required for publishing) - consider an article abstract"]
         [:div.form-group
          [:textarea {:name "post-content" :id "post-content"} (or post-content "")]]]])))
 
