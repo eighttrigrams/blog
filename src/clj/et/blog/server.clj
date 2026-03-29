@@ -4,6 +4,7 @@
             [et.blog.auth :as auth]
             [et.blog.views :as views]
             [et.blog.render :as render]
+            [et.blog.feed :as feed]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
             [clojure.string :as str]
@@ -272,6 +273,34 @@
         (db/update-post! (ensure-ds) id {:content content :footnotes footnotes})
         (redirect (str "/posts/" id))))))
 
+(defn- site-url [req]
+  (let [scheme (or (get-in req [:headers "x-forwarded-proto"]) "http")
+        host (get-in req [:headers "host"] "localhost")]
+    (str scheme "://" host)))
+
+(defn- build-feed [req title feed-path posts]
+  (let [fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
+        post-ids (mapv :post_id posts)
+        article-links (db/get-posts-article-links (ensure-ds) post-ids)
+        rendered (mapv #(render/render-content % fetch-fn) posts)
+        base (site-url req)]
+    {:status 200
+     :headers {"Content-Type" "application/atom+xml; charset=utf-8"}
+     :body (feed/atom-feed {:title title
+                            :feed-url (str base feed-path)
+                            :site-url base
+                            :posts posts
+                            :article-links article-links
+                            :rendered-posts rendered})}))
+
+(defn- feed-all-handler [req]
+  (let [posts (db/list-posts (ensure-ds))]
+    (build-feed req "Blog - All Posts" "/feed.xml" posts)))
+
+(defn- feed-articles-handler [req]
+  (let [posts (db/list-article-posts (ensure-ds))]
+    (build-feed req "Blog - Article Publications" "/feed/articles.xml" posts)))
+
 (defn- wrap-cookies [handler]
   (fn [req]
     (let [cookie-header (get-in req [:headers "cookie"] "")
@@ -300,6 +329,8 @@
   (GET "/posts/:id" [] post-handler)
   (GET "/posts/:id/edit" [] edit-post-handler)
   (POST "/posts/:id" [] update-post-handler)
+  (GET "/feed.xml" [] feed-all-handler)
+  (GET "/feed/articles.xml" [] feed-articles-handler)
   (route/resources "/")
   (route/not-found (fn [_] (html-response 404 (views/not-found-page {:logged-in? false})))))
 

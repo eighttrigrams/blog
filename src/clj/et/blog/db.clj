@@ -245,6 +245,20 @@
                    :order-by [[:created_at :desc]]})
       jdbc-opts)))
 
+(defn list-article-posts [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT p.post_id, p.content, p.footnotes, p.created_at, latest.first_at
+        FROM posts p
+        INNER JOIN (
+          SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
+          FROM posts
+          GROUP BY post_id
+        ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
+        INNER JOIN article_posts ap ON ap.post_id = p.post_id
+        ORDER BY latest.first_at DESC"]
+      jdbc-opts)))
+
 (defn get-post-article-link [ds post-id]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn

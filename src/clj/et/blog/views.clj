@@ -34,6 +34,9 @@
         nav { border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 0.75rem; margin-bottom: 2.5rem; display: flex; justify-content: space-between; align-items: center; }
         nav a { color: rgba(0,0,0,0.8); margin-right: 1.25rem; }
         nav a:hover { color: #FD5353; }
+        .nav-right { display: flex; align-items: center; gap: 0.75rem; }
+        .feed-icon { color: rgba(0,0,0,0.4); display: flex; align-items: center; }
+        .feed-icon:hover { color: #FD5353; text-decoration: none; }
         h1 { font-size: 2rem; font-weight: 600; line-height: 1.3; margin-bottom: 0.5rem; }
         h2 { font-size: 1.5rem; font-weight: 600; line-height: 1.3; }
         .subtitle { font-size: 1.2rem; color: rgba(0,0,0,0.5); margin-top: -0.5rem; margin-bottom: 0.5rem; }
@@ -96,7 +99,11 @@
           (list
             [:a {:href "/posts/new"} "New Post"]
             [:a {:href "/articles/new"} "New Article"]))]
-       [:div
+       [:div.nav-right
+        [:a.feed-icon {:href "/feed/articles.xml" :title "Articles feed"}
+         (h/raw "<svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><circle cx=\"68\" cy=\"189\" r=\"28\" fill=\"currentColor\"/><path d=\"M160 213h-34a89 89 0 0 0-89-89V90a123 123 0 0 1 123 123z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/><path d=\"M220 213h-34a149 149 0 0 0-149-149V30a183 183 0 0 1 183 183z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/></svg>")]
+        [:a.feed-icon {:href "/feed.xml" :title "All posts feed"}
+         (h/raw "<svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><circle cx=\"68\" cy=\"189\" r=\"28\" fill=\"currentColor\"/><path d=\"M160 213h-34a89 89 0 0 0-89-89V90a123 123 0 0 1 123 123z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/><path d=\"M220 213h-34a149 149 0 0 0-149-149V30a183 183 0 0 1 183 183z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/></svg>")]
         (if logged-in?
           [:a {:href "/logout"} "Logout"]
           [:a {:href "/login"} "Login"])]]
