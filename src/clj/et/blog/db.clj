@@ -45,6 +45,10 @@
                              :addenda (or addenda "")
                              :version version}]})
       jdbc-opts)
+    (jdbc/execute-one! conn
+      (sql/format {:insert-into :article_meta
+                   :values [{:article_id article-id}]})
+      jdbc-opts)
     (when (and publish? post-content)
       (let [post-id (next-post-id ds)]
         (jdbc/execute-one! conn
@@ -52,6 +56,10 @@
                        :values [{:post_id post-id
                                  :content post-content
                                  :footnotes ""}]})
+          jdbc-opts)
+        (jdbc/execute-one! conn
+          (sql/format {:insert-into :post_meta
+                       :values [{:post_id post-id}]})
           jdbc-opts)
         (jdbc/execute-one! conn
           (sql/format {:insert-into :article_posts
@@ -95,6 +103,10 @@
                                  :footnotes ""}]})
           jdbc-opts)
         (jdbc/execute-one! conn
+          (sql/format {:insert-into :post_meta
+                       :values [{:post_id post-id}]})
+          jdbc-opts)
+        (jdbc/execute-one! conn
           (sql/format {:insert-into :article_posts
                        :values [{:article_id article-id
                                  :article_version version
@@ -115,6 +127,7 @@
             WHERE version > 0
             GROUP BY article_id
           ) latest ON a.article_id = latest.article_id AND a.created_at = latest.max_created_at
+          INNER JOIN article_meta am ON am.article_id = a.article_id AND am.deleted = 0
           ORDER BY a.created_at DESC"]
         jdbc-opts)
       (jdbc/execute! conn
@@ -125,50 +138,75 @@
             FROM articles
             GROUP BY article_id
           ) latest ON a.article_id = latest.article_id AND a.created_at = latest.max_created_at
+          INNER JOIN article_meta am ON am.article_id = a.article_id AND am.deleted = 0
           ORDER BY a.created_at DESC"]
         jdbc-opts))))
 
-(defn get-article [ds article-id {:keys [published-only?]}]
-  (let [conn (get-conn ds)]
-    (jdbc/execute-one! conn
-      (sql/format {:select article-cols
-                   :from [:articles]
-                   :where (if published-only?
-                            [:and [:= :article_id article-id] [:> :version 0]]
-                            [:= :article_id article-id])
-                   :order-by [[:created_at :desc]]
-                   :limit 1})
-      jdbc-opts)))
-
-(defn get-article-version [ds article-id as-of]
-  (let [conn (get-conn ds)]
-    (jdbc/execute-one! conn
-      (sql/format {:select article-cols
-                   :from [:articles]
-                   :where [:and [:= :article_id article-id] [:<= :created_at as-of]]
-                   :order-by [[:created_at :desc]]
-                   :limit 1})
-      jdbc-opts)))
-
-(defn get-article-by-version [ds article-id version]
-  (let [conn (get-conn ds)]
-    (jdbc/execute-one! conn
-      (sql/format {:select article-cols
-                   :from [:articles]
-                   :where [:and [:= :article_id article-id] [:= :version version]]
-                   :order-by [[:created_at :desc]]
-                   :limit 1})
-      jdbc-opts)))
-
-(defn get-article-versions [ds article-id {:keys [published-only?]}]
+(defn list-deleted-articles [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      (sql/format {:select article-cols
-                   :from [:articles]
-                   :where (if published-only?
-                            [:and [:= :article_id article-id] [:> :version 0]]
-                            [:= :article_id article-id])
-                   :order-by [[:created_at :desc]]})
+      ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.created_at, a.version
+        FROM articles a
+        INNER JOIN (
+          SELECT article_id, MAX(created_at) AS max_created_at
+          FROM articles
+          GROUP BY article_id
+        ) latest ON a.article_id = latest.article_id AND a.created_at = latest.max_created_at
+        INNER JOIN article_meta am ON am.article_id = a.article_id AND am.deleted = 1
+        ORDER BY a.created_at DESC"]
+      jdbc-opts)))
+
+(defn get-article [ds article-id {:keys [published-only? include-deleted?]}]
+  (let [conn (get-conn ds)
+        base [:and [:= :a.article_id article-id]]
+        base (if published-only? (conj base [:> :a.version 0]) base)
+        base (if include-deleted? base (conj base [:= :am.deleted 0]))]
+    (jdbc/execute-one! conn
+      (sql/format {:select (mapv #(keyword (str "a." (name %))) article-cols)
+                   :from [[:articles :a]]
+                   :join [[:article_meta :am] [:= :am.article_id :a.article_id]]
+                   :where base
+                   :order-by [[:a.created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-article-version [ds article-id as-of {:keys [include-deleted?]}]
+  (let [conn (get-conn ds)
+        base [:and [:= :a.article_id article-id] [:<= :a.created_at as-of]]
+        base (if include-deleted? base (conj base [:= :am.deleted 0]))]
+    (jdbc/execute-one! conn
+      (sql/format {:select (mapv #(keyword (str "a." (name %))) article-cols)
+                   :from [[:articles :a]]
+                   :join [[:article_meta :am] [:= :am.article_id :a.article_id]]
+                   :where base
+                   :order-by [[:a.created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-article-by-version [ds article-id version {:keys [include-deleted?]}]
+  (let [conn (get-conn ds)
+        base [:and [:= :a.article_id article-id] [:= :a.version version]]
+        base (if include-deleted? base (conj base [:= :am.deleted 0]))]
+    (jdbc/execute-one! conn
+      (sql/format {:select (mapv #(keyword (str "a." (name %))) article-cols)
+                   :from [[:articles :a]]
+                   :join [[:article_meta :am] [:= :am.article_id :a.article_id]]
+                   :where base
+                   :order-by [[:a.created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-article-versions [ds article-id {:keys [published-only? include-deleted?]}]
+  (let [conn (get-conn ds)
+        base [:and [:= :a.article_id article-id]]
+        base (if published-only? (conj base [:> :a.version 0]) base)
+        base (if include-deleted? base (conj base [:= :am.deleted 0]))]
+    (jdbc/execute! conn
+      (sql/format {:select (mapv #(keyword (str "a." (name %))) article-cols)
+                   :from [[:articles :a]]
+                   :join [[:article_meta :am] [:= :am.article_id :a.article_id]]
+                   :where base
+                   :order-by [[:a.created_at :desc]]})
       jdbc-opts)))
 
 ;; --- Posts ---
@@ -192,6 +230,10 @@
                              :content (or content "")
                              :footnotes (or footnotes "")}]})
       jdbc-opts)
+    (jdbc/execute-one! conn
+      (sql/format {:insert-into :post_meta
+                   :values [{:post_id post-id}]})
+      jdbc-opts)
     post-id))
 
 (defn update-post! [ds post-id {:keys [content footnotes]}]
@@ -213,36 +255,60 @@
           FROM posts
           GROUP BY post_id
         ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
+        INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 0
         ORDER BY latest.first_at DESC"]
       jdbc-opts)))
 
-(defn get-post [ds post-id]
-  (let [conn (get-conn ds)]
-    (jdbc/execute-one! conn
-      (sql/format {:select post-cols
-                   :from [:posts]
-                   :where [:= :post_id post-id]
-                   :order-by [[:created_at :desc]]
-                   :limit 1})
-      jdbc-opts)))
-
-(defn get-post-version [ds post-id as-of]
-  (let [conn (get-conn ds)]
-    (jdbc/execute-one! conn
-      (sql/format {:select post-cols
-                   :from [:posts]
-                   :where [:and [:= :post_id post-id] [:<= :created_at as-of]]
-                   :order-by [[:created_at :desc]]
-                   :limit 1})
-      jdbc-opts)))
-
-(defn get-post-versions [ds post-id]
+(defn list-deleted-posts [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      (sql/format {:select post-cols
-                   :from [:posts]
-                   :where [:= :post_id post-id]
-                   :order-by [[:created_at :desc]]})
+      ["SELECT p.post_id, p.content, p.footnotes, p.created_at, latest.first_at
+        FROM posts p
+        INNER JOIN (
+          SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
+          FROM posts
+          GROUP BY post_id
+        ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
+        INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 1
+        ORDER BY latest.first_at DESC"]
+      jdbc-opts)))
+
+(defn get-post [ds post-id {:keys [include-deleted?]}]
+  (let [conn (get-conn ds)
+        base [:and [:= :p.post_id post-id]]
+        base (if include-deleted? base (conj base [:= :pm.deleted 0]))]
+    (jdbc/execute-one! conn
+      (sql/format {:select (mapv #(keyword (str "p." (name %))) post-cols)
+                   :from [[:posts :p]]
+                   :join [[:post_meta :pm] [:= :pm.post_id :p.post_id]]
+                   :where base
+                   :order-by [[:p.created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-post-version [ds post-id as-of {:keys [include-deleted?]}]
+  (let [conn (get-conn ds)
+        base [:and [:= :p.post_id post-id] [:<= :p.created_at as-of]]
+        base (if include-deleted? base (conj base [:= :pm.deleted 0]))]
+    (jdbc/execute-one! conn
+      (sql/format {:select (mapv #(keyword (str "p." (name %))) post-cols)
+                   :from [[:posts :p]]
+                   :join [[:post_meta :pm] [:= :pm.post_id :p.post_id]]
+                   :where base
+                   :order-by [[:p.created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-post-versions [ds post-id {:keys [include-deleted?]}]
+  (let [conn (get-conn ds)
+        base [:and [:= :p.post_id post-id]]
+        base (if include-deleted? base (conj base [:= :pm.deleted 0]))]
+    (jdbc/execute! conn
+      (sql/format {:select (mapv #(keyword (str "p." (name %))) post-cols)
+                   :from [[:posts :p]]
+                   :join [[:post_meta :pm] [:= :pm.post_id :p.post_id]]
+                   :where base
+                   :order-by [[:p.created_at :desc]]})
       jdbc-opts)))
 
 (defn list-article-posts [ds]
@@ -255,6 +321,7 @@
           FROM posts
           GROUP BY post_id
         ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
+        INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 0
         INNER JOIN article_posts ap ON ap.post_id = p.post_id
         ORDER BY latest.first_at DESC"]
       jdbc-opts)))
@@ -271,6 +338,20 @@
                    :order-by [[:a.created_at :desc]]
                    :limit 1})
       jdbc-opts)))
+
+(defn delete-article! [ds article-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:update :article_meta
+                   :set {:deleted 1}
+                   :where [:= :article_id article-id]}))))
+
+(defn delete-post! [ds post-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:update :post_meta
+                   :set {:deleted 1}
+                   :where [:= :post_id post-id]}))))
 
 (defn get-posts-article-links [ds post-ids]
   (if (empty? post-ids)

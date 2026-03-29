@@ -54,6 +54,8 @@
         .post-list a:hover { color: #FD5353; }
         .post-heading { display: flex; justify-content: space-between; align-items: center; }
         .post-heading h2 { margin: 0; }
+        .post-permalink { color: #1a0dab; text-decoration: none; }
+        .post-permalink:hover { text-decoration: underline; }
         .post-article-link { margin-top: 0.75rem; font-weight: 600; }
         .article-content { margin-top: 1.5rem; }
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
@@ -90,7 +92,13 @@
         .versions { margin-top: 2.5rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem; }
         .versions h3 { font-size: 1rem; font-weight: 600; color: rgba(0,0,0,0.6); }
         .versions ul { padding-left: 1.5rem; }
-        .versions li { margin-bottom: 0.3rem; font-size: 0.95rem; color: rgba(0,0,0,0.6); }"]]
+        .versions li { margin-bottom: 0.3rem; font-size: 0.95rem; color: rgba(0,0,0,0.6); }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-cancel { background: rgba(0,0,0,0.15); color: rgba(0,0,0,0.7); }
+        .btn-cancel:hover { background: rgba(0,0,0,0.25); text-decoration: none; }
+        .confirm-box { margin-top: 1.5rem; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 5px; }
+        .confirm-box .confirm-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }"]]
      [:body
       [:nav
        [:div
@@ -178,7 +186,9 @@
         [:h1 (if new? "New Article" "Edit Article")]
         [:div.edit-actions
          [:button.btn {:type "submit"} "Save"]
-         [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"} "Publish"]]]
+         [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"} "Publish"]
+         (when-not new?
+           [:a.btn.btn-small.btn-danger {:href (str "/articles/" (:article_id article) "/delete")} "Delete"])]]
        [:div.form-group
         [:label {:for "title"} "Title"]
         [:input {:type "text" :name "title" :id "title" :value (or (:title article) "") :required true}]]
@@ -207,7 +217,7 @@
        (for [{:keys [post_id created_at first_at rendered-content article-link]} posts]
          [:li
           [:div.post-heading
-           [:h2 (human-date (or first_at created_at))]
+           [:h2 [:a.post-permalink {:href (str "/posts/" post_id)} "#"] " " (human-date (or first_at created_at))]
            (when logged-in?
              [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"])]
           [:div.article-content (h/raw rendered-content)]
@@ -236,11 +246,56 @@
        [:div.edit-heading
         [:h1 (if new? "New Post" "Edit Post")]
         [:div.edit-actions
-         [:button.btn {:type "submit"} "Save"]]]
+         [:button.btn {:type "submit"} "Save"]
+         (when-not new?
+           [:a.btn.btn-small.btn-danger {:href (str "/posts/" (:post_id post) "/delete")} "Delete"])]]
        [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content"} (or (:content post) "")]]
       ])))
+
+(defn confirm-delete-article-page [{:keys [article logged-in?]}]
+  (layout {:title "Delete Article" :logged-in? logged-in?}
+    [:h1 "Delete Article"]
+    [:div.confirm-box
+     [:p "Are you sure you want to delete \"" (hu/escape-html (:title article)) "\"?"]
+     [:div.confirm-actions
+      [:form {:method "POST" :action (str "/articles/" (:article_id article) "/delete")}
+       [:button.btn.btn-danger {:type "submit"} "Delete"]]
+      [:a.btn.btn-cancel {:href (str "/articles/" (:article_id article) "/edit")} "Cancel"]]]))
+
+(defn confirm-delete-post-page [{:keys [post logged-in?]}]
+  (layout {:title "Delete Post" :logged-in? logged-in?}
+    [:h1 "Delete Post"]
+    [:div.confirm-box
+     [:p "Are you sure you want to delete the post from " (human-date (:created_at post)) "?"]
+     [:div.confirm-actions
+      [:form {:method "POST" :action (str "/posts/" (:post_id post) "/delete")}
+       [:button.btn.btn-danger {:type "submit"} "Delete"]]
+      [:a.btn.btn-cancel {:href (str "/posts/" (:post_id post) "/edit")} "Cancel"]]]))
+
+(defn deleted-articles-page [{:keys [articles logged-in?]}]
+  (layout {:title "Deleted Articles" :logged-in? logged-in?}
+    [:h1 "Deleted Articles"]
+    (if (seq articles)
+      [:ul.article-list
+       (for [{:keys [article_id title created_at]} articles]
+         [:li
+          [:h2 (hu/escape-html title)]
+          [:span.article-date created_at]])]
+      [:p "No deleted articles."])))
+
+(defn deleted-posts-page [{:keys [posts logged-in?]}]
+  (layout {:title "Deleted Posts" :logged-in? logged-in?}
+    [:h1 "Deleted Posts"]
+    (if (seq posts)
+      [:ul.post-list
+       (for [{:keys [created_at first_at rendered-content]} posts]
+         [:li
+          [:div.post-heading
+           [:h2 (human-date (or first_at created_at))]]
+          [:div.article-content (h/raw rendered-content)]])]
+      [:p "No deleted posts."])))
 
 (defn not-found-page [{:keys [logged-in?]}]
   (layout {:title "Not Found" :logged-in? logged-in?}

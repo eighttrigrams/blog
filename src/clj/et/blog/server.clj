@@ -87,18 +87,18 @@
         as-of (get-in req [:params :as-of])
         ver (get-in req [:params :version])
         raw     (cond
-                  as-of (db/get-article-version (ensure-ds) id as-of)
+                  as-of (db/get-article-version (ensure-ds) id as-of {})
                   ver   (let [v (Integer/parseInt ver)]
                           (if (and pub? (zero? v))
                             nil
-                            (db/get-article-by-version (ensure-ds) id v)))
+                            (db/get-article-by-version (ensure-ds) id v {})))
                   :else (db/get-article (ensure-ds) id {:published-only? pub?}))
         article (if (and pub? raw (zero? (or (:version raw) 0)))
                   nil
                   raw)]
     (if article
       (let [versions (db/get-article-versions (ensure-ds) id {:published-only? pub?})
-            fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
+            fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
             rendered-content (render/render-content article fetch-fn)
             rendered-addenda (render/markdown->html (:addenda article))]
         (html-response 200
@@ -206,11 +206,36 @@
                                                                 :post-content (when publish? post-content)}))
             (redirect (str "/articles/" id))))))))
 
+(defn- confirm-delete-article-handler [req]
+  (require-login req
+    (fn [req]
+      (let [id (Integer/parseInt (get-in req [:params :id]))
+            article (db/get-article (ensure-ds) id {})]
+        (if article
+          (html-response 200
+            (views/confirm-delete-article-page {:article article :logged-in? true}))
+          (html-response 404
+            (views/not-found-page {:logged-in? true})))))))
+
+(defn- delete-article-handler [req]
+  (require-login req
+    (fn [_]
+      (let [id (Integer/parseInt (get-in req [:params :id]))]
+        (db/delete-article! (ensure-ds) id)
+        (redirect "/")))))
+
+(defn- deleted-articles-handler [req]
+  (require-login req
+    (fn [_]
+      (let [articles (db/list-deleted-articles (ensure-ds))]
+        (html-response 200
+          (views/deleted-articles-page {:articles articles :logged-in? true}))))))
+
 ;; --- Posts ---
 
 (defn- posts-handler [req]
   (let [auth? (logged-in? req)
-        fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
+        fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
         posts (db/list-posts (ensure-ds))
         post-ids (mapv :post_id posts)
         article-links (db/get-posts-article-links (ensure-ds) post-ids)
@@ -226,11 +251,11 @@
         id (Integer/parseInt (get-in req [:params :id]))
         as-of (get-in req [:params :as-of])
         post (if as-of
-               (db/get-post-version (ensure-ds) id as-of)
-               (db/get-post (ensure-ds) id))]
+               (db/get-post-version (ensure-ds) id as-of {})
+               (db/get-post (ensure-ds) id {}))]
     (if post
-      (let [versions (if auth? (db/get-post-versions (ensure-ds) id) [post])
-            fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
+      (let [versions (if auth? (db/get-post-versions (ensure-ds) id {}) [post])
+            fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
             rendered-content (render/render-content post fetch-fn)]
         (html-response 200
           (views/post-page {:post post :versions versions :logged-in? auth?
@@ -257,7 +282,7 @@
   (require-login req
     (fn [req]
       (let [id (Integer/parseInt (get-in req [:params :id]))
-            post (db/get-post (ensure-ds) id)]
+            post (db/get-post (ensure-ds) id {})]
         (if post
           (html-response 200
             (views/edit-post-page {:post post :logged-in? true}))
@@ -273,13 +298,45 @@
         (db/update-post! (ensure-ds) id {:content content :footnotes footnotes})
         (redirect (str "/posts/" id))))))
 
+(defn- confirm-delete-post-handler [req]
+  (require-login req
+    (fn [req]
+      (let [id (Integer/parseInt (get-in req [:params :id]))
+            post (db/get-post (ensure-ds) id {})]
+        (if post
+          (html-response 200
+            (views/confirm-delete-post-page {:post post :logged-in? true}))
+          (html-response 404
+            (views/not-found-page {:logged-in? true})))))))
+
+(defn- delete-post-handler [req]
+  (require-login req
+    (fn [_]
+      (let [id (Integer/parseInt (get-in req [:params :id]))]
+        (db/delete-post! (ensure-ds) id)
+        (redirect "/posts")))))
+
+(defn- deleted-posts-handler [req]
+  (require-login req
+    (fn [_]
+      (let [fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
+            posts (db/list-deleted-posts (ensure-ds))
+            post-ids (mapv :post_id posts)
+            article-links (db/get-posts-article-links (ensure-ds) post-ids)
+            posts (->> posts
+                       (mapv #(assoc %
+                                :rendered-content (render/render-content % fetch-fn)
+                                :article-link (get article-links (:post_id %)))))]
+        (html-response 200
+          (views/deleted-posts-page {:posts posts :logged-in? true}))))))
+
 (defn- site-url [req]
   (let [scheme (or (get-in req [:headers "x-forwarded-proto"]) "http")
         host (get-in req [:headers "host"] "localhost")]
     (str scheme "://" host)))
 
 (defn- build-feed [req title feed-path posts]
-  (let [fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
+  (let [fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
         post-ids (mapv :post_id posts)
         article-links (db/get-posts-article-links (ensure-ds) post-ids)
         rendered (mapv #(render/render-content % fetch-fn) posts)
@@ -315,19 +372,25 @@
   (GET "/login" [] login-page-handler)
   (POST "/login" [] login-handler)
   (GET "/logout" [] logout-handler)
+  (GET "/articles/deleted" [] deleted-articles-handler)
   (GET "/articles/new" [] new-article-handler)
   (POST "/articles" [] create-article-handler)
   (GET ["/articles/:id/as-of/:as-of" :as-of #".*"] [] article-handler)
   (GET "/articles/:id/version/:version" [] article-handler)
   (GET "/articles/:id" [] article-handler)
   (GET "/articles/:id/edit" [] edit-article-handler)
+  (GET "/articles/:id/delete" [] confirm-delete-article-handler)
+  (POST "/articles/:id/delete" [] delete-article-handler)
   (POST "/articles/:id" [] update-article-handler)
   (GET "/posts" [] posts-handler)
+  (GET "/posts/deleted" [] deleted-posts-handler)
   (GET "/posts/new" [] new-post-handler)
   (POST "/posts" [] create-post-handler)
   (GET ["/posts/:id/as-of/:as-of" :as-of #".*"] [] post-handler)
   (GET "/posts/:id" [] post-handler)
   (GET "/posts/:id/edit" [] edit-post-handler)
+  (GET "/posts/:id/delete" [] confirm-delete-post-handler)
+  (POST "/posts/:id/delete" [] delete-post-handler)
   (POST "/posts/:id" [] update-post-handler)
   (GET "/feed.xml" [] feed-all-handler)
   (GET "/feed/articles.xml" [] feed-articles-handler)
