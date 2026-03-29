@@ -69,25 +69,41 @@
                              :version version}]})
       jdbc-opts)))
 
-(defn list-articles [ds]
-  (let [conn (get-conn ds)]
-    (jdbc/execute! conn
-      ["SELECT a.article_id, a.title, a.content, a.footnotes, a.addenda, a.created_at, a.version
-        FROM articles a
-        INNER JOIN (
-          SELECT article_id, MAX(created_at) AS max_created_at
-          FROM articles
-          GROUP BY article_id
-        ) latest ON a.article_id = latest.article_id AND a.created_at = latest.max_created_at
-        ORDER BY a.created_at DESC"]
-      jdbc-opts)))
+(def ^:private article-cols [:article_id :title :content :footnotes :addenda :created_at :version])
 
-(defn get-article [ds article-id]
+(defn list-articles [ds {:keys [published-only?]}]
+  (let [conn (get-conn ds)]
+    (if published-only?
+      (jdbc/execute! conn
+        ["SELECT a.article_id, a.title, a.content, a.footnotes, a.addenda, a.created_at, a.version
+          FROM articles a
+          INNER JOIN (
+            SELECT article_id, MAX(created_at) AS max_created_at
+            FROM articles
+            WHERE version > 0
+            GROUP BY article_id
+          ) latest ON a.article_id = latest.article_id AND a.created_at = latest.max_created_at
+          ORDER BY a.created_at DESC"]
+        jdbc-opts)
+      (jdbc/execute! conn
+        ["SELECT a.article_id, a.title, a.content, a.footnotes, a.addenda, a.created_at, a.version
+          FROM articles a
+          INNER JOIN (
+            SELECT article_id, MAX(created_at) AS max_created_at
+            FROM articles
+            GROUP BY article_id
+          ) latest ON a.article_id = latest.article_id AND a.created_at = latest.max_created_at
+          ORDER BY a.created_at DESC"]
+        jdbc-opts))))
+
+(defn get-article [ds article-id {:keys [published-only?]}]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      (sql/format {:select [:article_id :title :content :footnotes :addenda :created_at :version]
+      (sql/format {:select article-cols
                    :from [:articles]
-                   :where [:= :article_id article-id]
+                   :where (if published-only?
+                            [:and [:= :article_id article-id] [:> :version 0]]
+                            [:= :article_id article-id])
                    :order-by [[:created_at :desc]]
                    :limit 1})
       jdbc-opts)))
@@ -95,7 +111,7 @@
 (defn get-article-version [ds article-id as-of]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      (sql/format {:select [:article_id :title :content :footnotes :addenda :created_at :version]
+      (sql/format {:select article-cols
                    :from [:articles]
                    :where [:and [:= :article_id article-id] [:<= :created_at as-of]]
                    :order-by [[:created_at :desc]]
@@ -105,18 +121,20 @@
 (defn get-article-by-version [ds article-id version]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      (sql/format {:select [:article_id :title :content :footnotes :addenda :created_at :version]
+      (sql/format {:select article-cols
                    :from [:articles]
                    :where [:and [:= :article_id article-id] [:= :version version]]
                    :order-by [[:created_at :desc]]
                    :limit 1})
       jdbc-opts)))
 
-(defn get-article-versions [ds article-id]
+(defn get-article-versions [ds article-id {:keys [published-only?]}]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      (sql/format {:select [:article_id :title :content :footnotes :addenda :created_at :version]
+      (sql/format {:select article-cols
                    :from [:articles]
-                   :where [:= :article_id article-id]
+                   :where (if published-only?
+                            [:and [:= :article_id article-id] [:> :version 0]]
+                            [:= :article_id article-id])
                    :order-by [[:created_at :desc]]})
       jdbc-opts)))

@@ -3,6 +3,7 @@
             [et.blog.db :as db]
             [et.blog.auth :as auth]
             [et.blog.views :as views]
+            [et.blog.render :as render]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
             [clojure.string :as str]
@@ -73,25 +74,39 @@
   {:status 302 :headers {"Location" url}})
 
 (defn- home-handler [req]
-  (let [articles (db/list-articles (ensure-ds))]
+  (let [auth? (logged-in? req)
+        articles (db/list-articles (ensure-ds) {:published-only? (not auth?)})]
     (html-response 200
-      (views/home-page {:articles articles :logged-in? (logged-in? req)}))))
+      (views/home-page {:articles articles :logged-in? auth?}))))
 
 (defn- article-handler [req]
-  (let [id (Integer/parseInt (get-in req [:params :id]))
+  (let [auth? (logged-in? req)
+        pub? (not auth?)
+        id (Integer/parseInt (get-in req [:params :id]))
         as-of (get-in req [:params :as-of])
         ver (get-in req [:params :version])
-        article (cond
+        raw     (cond
                   as-of (db/get-article-version (ensure-ds) id as-of)
-                  ver   (db/get-article-by-version (ensure-ds) id (Integer/parseInt ver))
-                  :else (db/get-article (ensure-ds) id))]
+                  ver   (let [v (Integer/parseInt ver)]
+                          (if (and pub? (zero? v))
+                            nil
+                            (db/get-article-by-version (ensure-ds) id v)))
+                  :else (db/get-article (ensure-ds) id {:published-only? pub?}))
+        article (if (and pub? raw (zero? (or (:version raw) 0)))
+                  nil
+                  raw)]
     (if article
-      (let [versions (db/get-article-versions (ensure-ds) id)]
+      (let [versions (db/get-article-versions (ensure-ds) id {:published-only? pub?})
+            fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
+            rendered-content (render/render-content article fetch-fn)
+            rendered-addenda (render/markdown->html (:addenda article))]
         (html-response 200
-          (views/article-page {:article article :versions versions :logged-in? (logged-in? req)
-                               :current-version (:created_at article)})))
+          (views/article-page {:article article :versions versions :logged-in? auth?
+                               :current-version (:created_at article)
+                               :rendered-content rendered-content
+                               :rendered-addenda rendered-addenda})))
       (html-response 404
-        (views/not-found-page {:logged-in? (logged-in? req)})))))
+        (views/not-found-page {:logged-in? auth?})))))
 
 (defn- login-page-handler [req]
   (if (logged-in? req)

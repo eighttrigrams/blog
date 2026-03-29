@@ -29,9 +29,18 @@
         .article-list a { color: rgba(0,0,0,0.8); }
         .article-list a:hover h2 { color: #FD5353; }
         .article-date { color: rgba(0,0,0,0.4); font-size: 0.9rem; }
-        .article-content { white-space: pre-wrap; margin-top: 1.5rem; }
+        .article-content { margin-top: 1.5rem; }
+        .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
+        .article-content code { background: rgba(0,0,0,0.05); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
+        .article-content pre code { display: block; padding: 1rem; overflow-x: auto; }
         .article-section { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; }
         .article-section h3 { font-size: 1.1rem; font-weight: 600; color: rgba(0,0,0,0.6); margin-bottom: 0; }
+        .footnotes { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; }
+        .footnotes h3 { font-size: 1rem; font-weight: 600; color: rgba(0,0,0,0.6); }
+        .footnotes ol { padding-left: 1.5rem; font-size: 0.95rem; color: rgba(0,0,0,0.7); }
+        .footnotes li { margin-bottom: 0.3rem; }
+        sup a { color: #FD5353; text-decoration: none; }
+        sup.missing { color: #c00; font-size: 0.75rem; }
         .btn { display: inline-block; padding: 0.4rem 1rem; background: #FD5353; color: #fff; text-decoration: none; border: none; border-radius: 3px; cursor: pointer; font-size: 1rem; font-family: inherit; }
         .btn:hover { background: #e04848; text-decoration: none; }
         .btn-small { padding: 0.2rem 0.6rem; font-size: 0.85rem; }
@@ -75,8 +84,8 @@
           [:span.article-date created_at]])]
       [:p "No articles yet."])))
 
-(defn article-page [{:keys [article versions logged-in? current-version]}]
-  (let [{:keys [article_id title content footnotes addenda created_at version]} article]
+(defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda]}]
+  (let [{:keys [article_id title created_at version]} article]
     (layout {:title title :logged-in? logged-in?}
       [:article
        [:h1 (hu/escape-html title)]
@@ -86,15 +95,11 @@
          (when logged-in? [:span.version-badge.draft "draft"]))
        (when logged-in?
          [:span " " [:a.btn.btn-small {:href (str "/articles/" article_id "/edit")} "Edit"]])
-       [:div.article-content (hu/escape-html content)]
-       (when (and footnotes (not= footnotes ""))
-         [:div.article-section
-          [:h3 "Footnotes"]
-          [:div.article-content (hu/escape-html footnotes)]])
-       (when (and addenda (not= addenda ""))
+       [:div.article-content (h/raw rendered-content)]
+       (when rendered-addenda
          [:div.article-section
           [:h3 "Addenda"]
-          [:div.article-content (hu/escape-html addenda)]])]
+          [:div.article-content (h/raw rendered-addenda)]])]
       (when (> (count versions) 1)
         [:div.versions
          [:h3 "Version history"]
