@@ -159,7 +159,7 @@
   (require-login req
     (fn [req]
       (let [id (Integer/parseInt (get-in req [:params :id]))
-            article (db/get-article (ensure-ds) id)]
+            article (db/get-article (ensure-ds) id {})]
         (if article
           (html-response 200
             (views/edit-page {:article article :logged-in? true}))
