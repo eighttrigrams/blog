@@ -5,7 +5,8 @@
            [com.vladsch.flexmark.util.data MutableDataSet]))
 
 (def ^:private md-options (doto (MutableDataSet.)
-                            (.set HtmlRenderer/SOFT_BREAK "<br />\n")))
+                            (.set HtmlRenderer/SOFT_BREAK "<br />\n")
+                            (.set HtmlRenderer/ESCAPE_HTML true)))
 (def ^:private md-parser (.build (Parser/builder md-options)))
 (def ^:private md-renderer (.build (HtmlRenderer/builder md-options)))
 
