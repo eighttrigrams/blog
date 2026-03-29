@@ -186,6 +186,66 @@
                                                  :publish? publish?})
             (redirect (str "/articles/" id))))))))
 
+;; --- Posts ---
+
+(defn- posts-handler [req]
+  (let [auth? (logged-in? req)
+        posts (db/list-posts (ensure-ds))]
+    (html-response 200
+      (views/posts-page {:posts posts :logged-in? auth?}))))
+
+(defn- post-handler [req]
+  (let [auth? (logged-in? req)
+        id (Integer/parseInt (get-in req [:params :id]))
+        as-of (get-in req [:params :as-of])
+        post (if as-of
+               (db/get-post-version (ensure-ds) id as-of)
+               (db/get-post (ensure-ds) id))]
+    (if post
+      (let [versions (if auth? (db/get-post-versions (ensure-ds) id) [post])
+            fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of))
+            rendered-content (render/render-content post fetch-fn)]
+        (html-response 200
+          (views/post-page {:post post :versions versions :logged-in? auth?
+                            :current-version (:created_at post)
+                            :rendered-content rendered-content})))
+      (html-response 404
+        (views/not-found-page {:logged-in? auth?})))))
+
+(defn- new-post-handler [req]
+  (require-login req
+    (fn [req]
+      (html-response 200
+        (views/edit-post-page {:new? true :logged-in? (logged-in? req)})))))
+
+(defn- create-post-handler [req]
+  (require-login req
+    (fn [_]
+      (let [content (or (get-in req [:form-params "content"]) "")
+            footnotes (or (get-in req [:form-params "footnotes"]) "")
+            post-id (db/create-post! (ensure-ds) {:content content :footnotes footnotes})]
+        (redirect (str "/posts/" post-id))))))
+
+(defn- edit-post-handler [req]
+  (require-login req
+    (fn [req]
+      (let [id (Integer/parseInt (get-in req [:params :id]))
+            post (db/get-post (ensure-ds) id)]
+        (if post
+          (html-response 200
+            (views/edit-post-page {:post post :logged-in? true}))
+          (html-response 404
+            (views/not-found-page {:logged-in? true})))))))
+
+(defn- update-post-handler [req]
+  (require-login req
+    (fn [_]
+      (let [id (Integer/parseInt (get-in req [:params :id]))
+            content (or (get-in req [:form-params "content"]) "")
+            footnotes (or (get-in req [:form-params "footnotes"]) "")]
+        (db/update-post! (ensure-ds) id {:content content :footnotes footnotes})
+        (redirect (str "/posts/" id))))))
+
 (defn- wrap-cookies [handler]
   (fn [req]
     (let [cookie-header (get-in req [:headers "cookie"] "")
@@ -207,6 +267,13 @@
   (GET "/articles/:id" [] article-handler)
   (GET "/articles/:id/edit" [] edit-article-handler)
   (POST "/articles/:id" [] update-article-handler)
+  (GET "/posts" [] posts-handler)
+  (GET "/posts/new" [] new-post-handler)
+  (POST "/posts" [] create-post-handler)
+  (GET ["/posts/:id/as-of/:as-of" :as-of #".*"] [] post-handler)
+  (GET "/posts/:id" [] post-handler)
+  (GET "/posts/:id/edit" [] edit-post-handler)
+  (POST "/posts/:id" [] update-post-handler)
   (route/resources "/")
   (route/not-found (fn [_] (html-response 404 (views/not-found-page {:logged-in? false})))))
 

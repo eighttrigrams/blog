@@ -30,6 +30,12 @@
         .article-list a { color: rgba(0,0,0,0.8); }
         .article-list a:hover h2 { color: #FD5353; }
         .article-date { color: rgba(0,0,0,0.4); font-size: 0.9rem; }
+        .post-list { list-style: none; padding: 0; }
+        .post-list li { margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
+        .post-list li:last-child { border-bottom: none; }
+        .post-list a { color: rgba(0,0,0,0.8); }
+        .post-list a:hover { color: #FD5353; }
+        .post-preview { display: block; white-space: pre-wrap; }
         .article-content { margin-top: 1.5rem; }
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
         .article-content code { background: rgba(0,0,0,0.05); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
@@ -70,8 +76,11 @@
       [:nav
        [:div
         [:a {:href "/"} "Blog"]
+        [:a {:href "/posts"} "Posts"]
         (when logged-in?
-          [:a {:href "/articles/new"} "New Article"])]
+          (list
+            [:a {:href "/articles/new"} "New Article"]
+            [:a {:href "/posts/new"} "New Post"]))]
        [:div
         (if logged-in?
           [:a {:href "/logout"} "Logout"]
@@ -89,18 +98,19 @@
           [:span.article-date created_at]])]
       [:p "No articles yet."])))
 
-(defn- version-nav [article_id created_at versions]
+(defn- version-nav [base-path id-key entity created_at versions]
   (let [sorted (sort-by :created_at versions)
         idx (.indexOf (mapv :created_at sorted) created_at)
         prev-v (when (pos? idx) (nth sorted (dec idx)))
-        next-v (when (< idx (dec (count sorted))) (nth sorted (inc idx)))]
+        next-v (when (< idx (dec (count sorted))) (nth sorted (inc idx)))
+        eid (get entity id-key)]
     [:div.version-nav
      (if prev-v
-       [:a.version-arrow {:href (str "/articles/" article_id "/as-of/" (:created_at prev-v))} "\u2190"]
+       [:a.version-arrow {:href (str base-path eid "/as-of/" (:created_at prev-v))} "\u2190"]
        [:span.version-arrow.disabled "\u2190"])
      [:span.article-date created_at]
      (if next-v
-       [:a.version-arrow {:href (str "/articles/" article_id "/as-of/" (:created_at next-v))} "\u2192"]
+       [:a.version-arrow {:href (str base-path eid "/as-of/" (:created_at next-v))} "\u2192"]
        [:span.version-arrow.disabled "\u2192"])]))
 
 (defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda]}]
@@ -111,7 +121,7 @@
        (when (and subtitle (not= subtitle ""))
          [:p.subtitle (hu/escape-html subtitle)])
        (if (> (count versions) 1)
-         (version-nav article_id (or current-version created_at) versions)
+         (version-nav "/articles/" :article_id article (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
        (if (and version (pos? version))
          [:span.version-badge (str "v" version)]
@@ -159,6 +169,45 @@
        [:div.form-group
         [:label {:for "addenda"} "Addenda"]
         [:textarea {:name "addenda" :id "addenda"} (hu/escape-html (or (:addenda article) ""))]]])))
+
+(defn posts-page [{:keys [posts logged-in?]}]
+  (layout {:title "Posts" :logged-in? logged-in?}
+    [:h1 "Posts"]
+    (if (seq posts)
+      [:ul.post-list
+       (for [{:keys [post_id content created_at first_at]} posts]
+         (let [preview (let [s (or content "")] (if (> (count s) 200) (str (subs s 0 200) "...") s))]
+           [:li
+            [:a {:href (str "/posts/" post_id)}
+             [:span.post-preview (hu/escape-html preview)]]
+            [:span.article-date (or first_at created_at)]]))]
+      [:p "No posts yet."])))
+
+(defn post-page [{:keys [post versions logged-in? current-version rendered-content]}]
+  (let [{:keys [post_id created_at]} post]
+    (layout {:title "Post" :logged-in? logged-in?}
+      [:article
+       (if (and logged-in? (> (count versions) 1))
+         (version-nav "/posts/" :post_id post (or current-version created_at) versions)
+         [:div.version-nav [:span.article-date created_at]])
+       (when logged-in?
+         [:span [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"]])
+       [:div.article-content (h/raw rendered-content)]])))
+
+(defn edit-post-page [{:keys [post logged-in? new?]}]
+  (let [action (if new? "/posts" (str "/posts/" (:post_id post)))]
+    (layout {:title (if new? "New Post" "Edit Post") :logged-in? logged-in?}
+      [:form {:method "POST" :action action}
+       [:div.edit-heading
+        [:h1 (if new? "New Post" "Edit Post")]
+        [:div.edit-actions
+         [:button.btn {:type "submit"} "Save"]]]
+       [:div.form-group
+        [:label {:for "content"} "Content"]
+        [:textarea {:name "content" :id "content"} (hu/escape-html (or (:content post) ""))]]
+       [:div.form-group
+        [:label {:for "footnotes"} "Footnotes"]
+        [:textarea {:name "footnotes" :id "footnotes"} (hu/escape-html (or (:footnotes post) ""))]]])))
 
 (defn not-found-page [{:keys [logged-in?]}]
   (layout {:title "Not Found" :logged-in? logged-in?}

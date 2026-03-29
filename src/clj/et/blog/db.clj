@@ -140,3 +140,77 @@
                             [:= :article_id article-id])
                    :order-by [[:created_at :desc]]})
       jdbc-opts)))
+
+;; --- Posts ---
+
+(def ^:private post-cols [:post_id :content :footnotes :created_at])
+
+(defn next-post-id [ds]
+  (let [conn (get-conn ds)
+        result (jdbc/execute-one! conn
+                 (sql/format {:select [[[:coalesce [:max :post_id] 0]]]
+                              :from [:posts]})
+                 jdbc-opts)]
+    (inc (first (vals result)))))
+
+(defn create-post! [ds {:keys [content footnotes]}]
+  (let [conn (get-conn ds)
+        post-id (next-post-id ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:insert-into :posts
+                   :values [{:post_id post-id
+                             :content (or content "")
+                             :footnotes (or footnotes "")}]})
+      jdbc-opts)
+    post-id))
+
+(defn update-post! [ds post-id {:keys [content footnotes]}]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:insert-into :posts
+                   :values [{:post_id post-id
+                             :content (or content "")
+                             :footnotes (or footnotes "")}]})
+      jdbc-opts)))
+
+(defn list-posts [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT p.post_id, p.content, p.footnotes, p.created_at, latest.first_at
+        FROM posts p
+        INNER JOIN (
+          SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
+          FROM posts
+          GROUP BY post_id
+        ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
+        ORDER BY latest.first_at DESC"]
+      jdbc-opts)))
+
+(defn get-post [ds post-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:select post-cols
+                   :from [:posts]
+                   :where [:= :post_id post-id]
+                   :order-by [[:created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-post-version [ds post-id as-of]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:select post-cols
+                   :from [:posts]
+                   :where [:and [:= :post_id post-id] [:<= :created_at as-of]]
+                   :order-by [[:created_at :desc]]
+                   :limit 1})
+      jdbc-opts)))
+
+(defn get-post-versions [ds post-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      (sql/format {:select post-cols
+                   :from [:posts]
+                   :where [:= :post_id post-id]
+                   :order-by [[:created_at :desc]]})
+      jdbc-opts)))
