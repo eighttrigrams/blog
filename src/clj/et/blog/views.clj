@@ -234,7 +234,7 @@
               " \u2192"]])])]
       [:p "No posts yet."])))
 
-(defn post-page [{:keys [post versions logged-in? current-version rendered-content]}]
+(defn post-page [{:keys [post versions logged-in? current-version rendered-content article-link]}]
   (let [{:keys [post_id created_at]} post]
     (layout {:title "Post" :logged-in? logged-in?}
       [:article
@@ -243,7 +243,12 @@
          [:div.version-nav [:span.article-date created_at]])
        (when logged-in?
          [:span [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"]])
-       [:div.article-content (h/raw rendered-content)]])))
+       [:div.article-content (h/raw rendered-content)]
+       (when article-link
+         [:p.post-article-link
+          [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
+           (hu/escape-html (:title article-link))
+           " \u2192"]])])))
 
 (defn edit-post-page [{:keys [post logged-in? new?]}]
   (let [action (if new? "/posts" (str "/posts/" (:post_id post)))]

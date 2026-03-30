@@ -256,11 +256,13 @@
     (if post
       (let [versions (if auth? (db/get-post-versions (ensure-ds) id {}) [post])
             fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
-            rendered-content (render/render-content post fetch-fn)]
+            rendered-content (render/render-content post fetch-fn)
+            article-link (db/get-post-article-link (ensure-ds) id)]
         (html-response 200
           (views/post-page {:post post :versions versions :logged-in? auth?
                             :current-version (:created_at post)
-                            :rendered-content rendered-content})))
+                            :rendered-content rendered-content
+                            :article-link article-link})))
       (html-response 404
         (views/not-found-page {:logged-in? auth?})))))
 
