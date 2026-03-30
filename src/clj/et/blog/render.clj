@@ -2,11 +2,13 @@
   (:require [clojure.string :as str])
   (:import [com.vladsch.flexmark.html HtmlRenderer]
            [com.vladsch.flexmark.parser Parser]
-           [com.vladsch.flexmark.util.data MutableDataSet]))
+           [com.vladsch.flexmark.util.data MutableDataSet]
+           [com.vladsch.flexmark.ext.typographic TypographicExtension]))
 
 (def ^:private md-options (doto (MutableDataSet.)
                             (.set HtmlRenderer/SOFT_BREAK "<br />\n")
-                            (.set HtmlRenderer/ESCAPE_HTML true)))
+                            (.set HtmlRenderer/ESCAPE_HTML true)
+                            (.set Parser/EXTENSIONS [(TypographicExtension/create)])))
 (def ^:private md-parser (.build (Parser/builder md-options)))
 (def ^:private md-renderer (.build (HtmlRenderer/builder md-options)))
 
@@ -29,12 +31,13 @@
 
 (defn- parse-footnote-defs [footnotes-text]
   (when (and footnotes-text (not (str/blank? footnotes-text)))
-    (->> (str/split-lines footnotes-text)
-         (keep (fn [line]
-                 (let [trimmed (str/trim line)]
-                   (when-let [[_ id text] (re-matches #"-?\s*FOOTNOTE:([a-zA-Z0-9_-]+)\s+(.*)" trimmed)]
-                     [id text]))))
-         (into {}))))
+    (let [parts (str/split footnotes-text #"(?m)(?=^-?\s*FOOTNOTE:)")]
+      (->> parts
+           (keep (fn [part]
+                   (let [trimmed (str/trim part)]
+                     (when-let [[_ id text] (re-find #"^-?\s*FOOTNOTE:([a-zA-Z0-9_-]+)\s+([\s\S]*)" trimmed)]
+                       [id (str/trim text)]))))
+           (into {})))))
 
 (defn- replace-footnote-refs [content ref-order def-map]
   (str/replace content footnote-ref-pattern
@@ -70,7 +73,8 @@
   (let [entries (keep-indexed
                   (fn [idx id]
                     (when-let [text (get def-map id)]
-                      (str "<li id=\"fn-" (inc idx) "\">" text "</li>")))
+                      (let [html (or (markdown->html text) text)]
+                        (str "<li id=\"fn-" (inc idx) "\">" html "</li>"))))
                   ref-ids)]
     (when (seq entries)
       (str "<section class=\"footnotes\"><h3>Footnotes</h3>\n<ol>\n"
@@ -82,9 +86,8 @@
         ref-ids (find-footnote-refs content)
         ref-order (into {} (map-indexed (fn [i id] [id i]) ref-ids))
         def-map (or (parse-footnote-defs footnotes) {})
-        processed (-> content
-                      (resolve-citations fetch-fn)
-                      (replace-footnote-refs ref-order def-map))
+        processed (resolve-citations content fetch-fn)
         html (or (markdown->html processed) "")
+        html (replace-footnote-refs html ref-order def-map)
         footnotes-html (render-footnotes-html ref-ids def-map)]
     (str html (or footnotes-html ""))))

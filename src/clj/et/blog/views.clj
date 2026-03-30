@@ -59,6 +59,7 @@
         .post-permalink:hover { text-decoration: underline; }
         .post-article-link { margin-top: 0.75rem; font-weight: 600; }
         .article-content { margin-top: 1.5rem; }
+        .article-content img { max-width: 100%; height: auto; }
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
         .article-content code { background: rgba(0,0,0,0.05); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
         .article-content pre code { display: block; padding: 1rem; overflow-x: auto; }
