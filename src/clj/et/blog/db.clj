@@ -54,12 +54,14 @@
                              :abstract (or abstract "")}]})
       jdbc-opts)
     (when (and publish? post-content)
-      (let [post-id (next-post-id ds)]
+      (let [post-id (next-post-id ds)
+            post-image (or preview-image "")]
         (jdbc/execute-one! conn
           (sql/format {:insert-into :posts
                        :values [{:post_id post-id
                                  :content post-content
-                                 :footnotes ""}]})
+                                 :footnotes ""
+                                 :image post-image}]})
           jdbc-opts)
         (jdbc/execute-one! conn
           (sql/format {:insert-into :post_meta
@@ -108,12 +110,19 @@
                        :set meta-updates
                        :where [:= :article_id article-id]}))))
     (when (and publish? post-content)
-      (let [post-id (next-post-id ds)]
+      (let [post-id (next-post-id ds)
+            current-meta (jdbc/execute-one! conn
+                           (sql/format {:select [:preview_image]
+                                        :from [:article_meta]
+                                        :where [:= :article_id article-id]})
+                           jdbc-opts)
+            post-image (or preview-image (:preview_image current-meta) "")]
         (jdbc/execute-one! conn
           (sql/format {:insert-into :posts
                        :values [{:post_id post-id
                                  :content post-content
-                                 :footnotes ""}]})
+                                 :footnotes ""
+                                 :image post-image}]})
           jdbc-opts)
         (jdbc/execute-one! conn
           (sql/format {:insert-into :post_meta
@@ -228,7 +237,7 @@
 
 ;; --- Posts ---
 
-(def ^:private post-cols [:post_id :content :footnotes :created_at])
+(def ^:private post-cols [:post_id :content :footnotes :image :created_at])
 
 (defn next-post-id [ds]
   (let [conn (get-conn ds)
@@ -238,14 +247,15 @@
                  jdbc-opts)]
     (inc (first (vals result)))))
 
-(defn create-post! [ds {:keys [content footnotes]}]
+(defn create-post! [ds {:keys [content footnotes image]}]
   (let [conn (get-conn ds)
         post-id (next-post-id ds)]
     (jdbc/execute-one! conn
       (sql/format {:insert-into :posts
                    :values [{:post_id post-id
                              :content (or content "")
-                             :footnotes (or footnotes "")}]})
+                             :footnotes (or footnotes "")
+                             :image (or image "")}]})
       jdbc-opts)
     (jdbc/execute-one! conn
       (sql/format {:insert-into :post_meta
@@ -253,19 +263,20 @@
       jdbc-opts)
     post-id))
 
-(defn update-post! [ds post-id {:keys [content footnotes]}]
+(defn update-post! [ds post-id {:keys [content footnotes image]}]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
       (sql/format {:insert-into :posts
                    :values [{:post_id post-id
                              :content (or content "")
-                             :footnotes (or footnotes "")}]})
+                             :footnotes (or footnotes "")
+                             :image (or image "")}]})
       jdbc-opts)))
 
 (defn list-posts [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      ["SELECT p.post_id, p.content, p.footnotes, p.created_at, latest.first_at
+      ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, latest.first_at
         FROM posts p
         INNER JOIN (
           SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
@@ -279,7 +290,7 @@
 (defn list-deleted-posts [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      ["SELECT p.post_id, p.content, p.footnotes, p.created_at, latest.first_at
+      ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, latest.first_at
         FROM posts p
         INNER JOIN (
           SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
@@ -331,7 +342,7 @@
 (defn list-article-posts [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      ["SELECT p.post_id, p.content, p.footnotes, p.created_at, latest.first_at
+      ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, latest.first_at
         FROM posts p
         INNER JOIN (
           SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at

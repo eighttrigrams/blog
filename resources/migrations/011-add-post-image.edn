@@ -1,0 +1,4 @@
+{:id "011-add-post-image"
+ :up ["ALTER TABLE posts ADD COLUMN image TEXT NOT NULL DEFAULT ''"]
+ :down ["ALTER TABLE posts DROP COLUMN image"]
+ :transactions false}

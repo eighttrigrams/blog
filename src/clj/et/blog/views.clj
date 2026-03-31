@@ -125,9 +125,8 @@
          (h/raw "<svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><circle cx=\"68\" cy=\"189\" r=\"28\" fill=\"currentColor\"/><path d=\"M160 213h-34a89 89 0 0 0-89-89V90a123 123 0 0 1 123 123z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/><path d=\"M220 213h-34a149 149 0 0 0-149-149V30a183 183 0 0 1 183 183z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/></svg>")]
         [:a.feed-icon {:href "/feed.xml" :title "All posts feed"}
          (h/raw "<svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><circle cx=\"68\" cy=\"189\" r=\"28\" fill=\"currentColor\"/><path d=\"M160 213h-34a89 89 0 0 0-89-89V90a123 123 0 0 1 123 123z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/><path d=\"M220 213h-34a149 149 0 0 0-149-149V30a183 183 0 0 1 183 183z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/></svg>")]
-        (if logged-in?
-          [:a {:href "/logout"} "Logout"]
-          [:a {:href "/login"} "Login"])]]
+        (when logged-in?
+          [:a {:href "/logout"} "Logout"])]]
       body]])))
 
 (defn home-page [{:keys [articles logged-in?]}]
@@ -257,7 +256,7 @@
     [:h1 "Posts"]
     (if (seq posts)
       [:ul.post-list
-       (for [{:keys [post_id created_at first_at rendered-content article-link]} posts]
+       (for [{:keys [post_id created_at first_at rendered-content article-link resolved-image]} posts]
          [:li
           [:div.post-heading
            [:h2 [:a.post-permalink {:href (str "/posts/" post_id)} "#"] " " (human-date (or first_at created_at))]
@@ -266,9 +265,9 @@
           [:div.article-content (h/raw rendered-content)]
           (when article-link
             (list
-              (when-let [img (not-empty (:preview_image article-link))]
+              (when resolved-image
                 [:a {:href (str "/articles/" (:article_id article-link))}
-                 [:img.article-preview {:src img :alt (:title article-link)}]])
+                 [:img.article-preview {:src resolved-image :alt (:title article-link)}]])
               [:p.post-article-link
                [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
                 (:title article-link)
@@ -277,7 +276,7 @@
                 [:p.subtitle sub])))])]
       [:p "No posts yet."])))
 
-(defn post-page [{:keys [post versions logged-in? current-version rendered-content article-link]}]
+(defn post-page [{:keys [post versions logged-in? current-version rendered-content article-link resolved-image]}]
   (let [{:keys [post_id created_at]} post]
     (layout {:title "Post" :logged-in? logged-in?}
       [:article
@@ -289,9 +288,9 @@
        [:div.article-content (h/raw rendered-content)]
        (when article-link
          (list
-           (when-let [img (not-empty (:preview_image article-link))]
+           (when resolved-image
              [:a {:href (str "/articles/" (:article_id article-link))}
-              [:img.article-preview {:src img :alt (:title article-link)}]])
+              [:img.article-preview {:src resolved-image :alt (:title article-link)}]])
            [:p.post-article-link
             [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
              (:title article-link)
@@ -309,6 +308,9 @@
          [:button.btn {:type "submit"} "Save"]
          (when-not new?
            [:a.btn.btn-small.btn-danger {:href (str "/posts/" (:post_id post) "/delete")} "Delete"])]]
+       [:div.form-group
+        [:label {:for "image"} "Image"]
+        [:input {:type "text" :name "image" :id "image" :value (or (:image post) "")}]]
        [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content"} (or (:content post) "")]]

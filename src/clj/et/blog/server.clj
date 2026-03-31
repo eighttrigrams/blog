@@ -74,11 +74,14 @@
 (defn- redirect [url]
   {:status 302 :headers {"Location" url}})
 
-(defn- resolve-preview-image [article]
-  (if-let [img (not-empty (:preview_image article))]
+(defn- resolve-image-field [m k]
+  (if-let [img (not-empty (get m k))]
     (let [base (or (:image-base-url @*config) "")]
-      (assoc article :preview_image (str base "/" img)))
-    article))
+      (assoc m k (str base "/" img)))
+    m))
+
+(defn- resolve-preview-image [article]
+  (resolve-image-field article :preview_image))
 
 (defn- home-handler [req]
   (let [auth? (logged-in? req)
@@ -90,7 +93,8 @@
                                (-> %
                                    resolve-preview-image
                                    (assoc :latest-version (:article_version pd))
-                                   (assoc :latest-published-at (:published_at pd))))))]
+                                   (assoc :latest-published-at (:published_at pd)))))
+                      (sort-by :latest-published-at #(compare %2 %1)))]
     (html-response 200
       (views/home-page {:articles articles :logged-in? auth?}))))
 
@@ -256,10 +260,7 @@
 ;; --- Posts ---
 
 (defn- resolve-link-preview [link]
-  (if-let [img (not-empty (:preview_image link))]
-    (let [base (or (:image-base-url @*config) "")]
-      (assoc link :preview_image (str base "/" img)))
-    link))
+  (resolve-image-field link :preview_image))
 
 (defn- posts-handler [req]
   (let [auth? (logged-in? req)
@@ -268,9 +269,10 @@
         post-ids (mapv :post_id posts)
         article-links (db/get-posts-article-links (ensure-ds) post-ids)
         posts (->> posts
-                   (mapv #(assoc %
-                            :rendered-content (render/render-content % fetch-fn)
-                            :article-link (some-> (get article-links (:post_id %)) resolve-link-preview))))]
+                   (mapv #(-> %
+                              (assoc :rendered-content (render/render-content % fetch-fn)
+                                     :article-link (some-> (get article-links (:post_id %)) resolve-link-preview)
+                                     :resolved-image (not-empty (:image (resolve-image-field % :image)))))))]
     (html-response 200
       (views/posts-page {:posts posts :logged-in? auth?}))))
 
@@ -290,7 +292,8 @@
           (views/post-page {:post post :versions versions :logged-in? auth?
                             :current-version (:created_at post)
                             :rendered-content rendered-content
-                            :article-link article-link})))
+                            :article-link article-link
+                            :resolved-image (not-empty (:image (resolve-image-field post :image)))})))
       (html-response 404
         (views/not-found-page {:logged-in? auth?})))))
 
@@ -305,7 +308,8 @@
     (fn [_]
       (let [content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
-            post-id (db/create-post! (ensure-ds) {:content content :footnotes footnotes})]
+            image (or (get-in req [:form-params "image"]) "")
+            post-id (db/create-post! (ensure-ds) {:content content :footnotes footnotes :image image})]
         (redirect (str "/posts/" post-id))))))
 
 (defn- edit-post-handler [req]
@@ -324,8 +328,9 @@
     (fn [_]
       (let [id (Integer/parseInt (get-in req [:params :id]))
             content (or (get-in req [:form-params "content"]) "")
-            footnotes (or (get-in req [:form-params "footnotes"]) "")]
-        (db/update-post! (ensure-ds) id {:content content :footnotes footnotes})
+            footnotes (or (get-in req [:form-params "footnotes"]) "")
+            image (or (get-in req [:form-params "image"]) "")]
+        (db/update-post! (ensure-ds) id {:content content :footnotes footnotes :image image})
         (redirect (str "/posts/" id))))))
 
 (defn- confirm-delete-post-handler [req]
