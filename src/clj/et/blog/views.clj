@@ -35,7 +35,7 @@
         a:hover { text-decoration: underline; }
         a:visited { color: #1a0dab; }
         nav { border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 0.75rem; margin-bottom: 2.5rem; display: flex; justify-content: space-between; align-items: center; }
-        nav a { color: rgba(0,0,0,0.8); margin-right: 1.25rem; }
+        nav a { color: #FD5353; margin-right: 1.25rem; }
         nav a:hover { color: #FD5353; }
         .nav-right { display: flex; align-items: center; gap: 0.75rem; }
         .feed-icon { color: rgba(0,0,0,0.4); display: flex; align-items: center; }
@@ -117,9 +117,7 @@
         [:a {:href "/posts"} "Posts"]
         [:a {:href "/"} "Articles"]
         (when logged-in?
-          (list
-            [:a {:href "/posts/new"} "New Post"]
-            [:a {:href "/articles/new"} "New Article"]))]
+          [:a {:href "/articles/drafts"} "Drafts"])]
        [:div.nav-right
         [:a.feed-icon {:href "/feed/articles.xml" :title "Articles feed"}
          (h/raw "<svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><circle cx=\"68\" cy=\"189\" r=\"28\" fill=\"currentColor\"/><path d=\"M160 213h-34a89 89 0 0 0-89-89V90a123 123 0 0 1 123 123z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/><path d=\"M220 213h-34a149 149 0 0 0-149-149V30a183 183 0 0 1 183 183z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/></svg>")]
@@ -156,6 +154,20 @@
                 (when has-abs
                   [:div.article-summary (h/raw (render/markdown->html abstract))])]]))])]
       [:p "No articles yet."])))
+
+(defn drafts-page [{:keys [articles logged-in?]}]
+  (layout {:title "Drafts" :logged-in? logged-in?}
+    [:div
+     [:p [:a {:href "/articles/new"} "New Article"]]
+     (if (seq articles)
+       [:ul.article-list
+        (for [{:keys [article_id title subtitle]} articles]
+          [:li
+           [:a {:href (str "/articles/" article_id)}
+            [:h2 title]]
+           (when (and subtitle (not= subtitle ""))
+             [:p.subtitle subtitle])])]
+       [:p "No drafts."])]))
 
 (defn- version-nav [base-path id-key entity created_at versions]
   (let [sorted (sort-by :created_at versions)
@@ -256,6 +268,8 @@
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}
     [:h1 "Posts"]
+    (when logged-in?
+      [:p [:a {:href "/posts/new"} "New Post"]])
     (if (seq posts)
       [:ul.post-list
        (for [{:keys [post_id created_at first_at rendered-content article-link resolved-image]} posts]

@@ -153,6 +153,13 @@
     (handler req)
     (redirect "/login")))
 
+(defn- drafts-handler [req]
+  (require-login req
+    (fn [req]
+      (let [articles (db/list-draft-articles (ensure-ds))]
+        (html-response 200
+          (views/drafts-page {:articles articles :logged-in? true}))))))
+
 (defn- new-article-handler [req]
   (require-login req
     (fn [req]
@@ -408,6 +415,7 @@
   (POST "/login" [] login-handler)
   (GET "/logout" [] logout-handler)
   (GET "/articles/deleted" [] deleted-articles-handler)
+  (GET "/articles/drafts" [] drafts-handler)
   (GET "/articles/new" [] new-article-handler)
   (POST "/articles" [] create-article-handler)
   (GET ["/articles/:id/as-of/:as-of" :as-of #".*"] [] article-handler)

@@ -168,6 +168,21 @@
           ORDER BY a.created_at DESC"]
         jdbc-opts))))
 
+(defn list-draft-articles [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version, am.preview_image, am.abstract
+        FROM articles a
+        INNER JOIN (
+          SELECT article_id, MAX(created_at) AS max_created_at
+          FROM articles
+          GROUP BY article_id
+          HAVING MAX(version) = 0
+        ) latest ON a.article_id = latest.article_id AND a.created_at = latest.max_created_at
+        INNER JOIN article_meta am ON am.article_id = a.article_id AND am.deleted = 0
+        ORDER BY a.created_at DESC"]
+      jdbc-opts)))
+
 (defn list-deleted-articles [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
