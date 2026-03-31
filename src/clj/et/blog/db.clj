@@ -31,7 +31,7 @@
                  jdbc-opts)]
     (inc (first (vals result)))))
 
-(defn create-article! [ds {:keys [title subtitle content footnotes addenda publish? post-content]}]
+(defn create-article! [ds {:keys [title subtitle content footnotes addenda preamble publish? post-content]}]
   (let [conn (get-conn ds)
         article-id (next-article-id ds)
         version (if publish? 1 0)]
@@ -43,6 +43,7 @@
                              :content content
                              :footnotes (or footnotes "")
                              :addenda (or addenda "")
+                             :preamble (or preamble "")
                              :version version}]})
       jdbc-opts)
     (jdbc/execute-one! conn
@@ -80,7 +81,7 @@
                  jdbc-opts)]
     (or (:version result) 0)))
 
-(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda publish? post-content]}]
+(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda preamble publish? post-content]}]
   (let [conn (get-conn ds)
         cur (current-version ds article-id)
         version (if publish? (inc cur) cur)]
@@ -92,6 +93,7 @@
                              :content content
                              :footnotes (or footnotes "")
                              :addenda (or addenda "")
+                             :preamble (or preamble "")
                              :version version}]})
       jdbc-opts)
     (when (and publish? post-content)
@@ -113,13 +115,13 @@
                                  :post_id post-id}]})
           jdbc-opts)))))
 
-(def ^:private article-cols [:article_id :title :subtitle :content :footnotes :addenda :created_at :version])
+(def ^:private article-cols [:article_id :title :subtitle :content :footnotes :addenda :preamble :created_at :version])
 
 (defn list-articles [ds {:keys [published-only?]}]
   (let [conn (get-conn ds)]
     (if published-only?
       (jdbc/execute! conn
-        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.created_at, a.version
+        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version
           FROM articles a
           INNER JOIN (
             SELECT article_id, MAX(created_at) AS max_created_at
@@ -131,7 +133,7 @@
           ORDER BY a.created_at DESC"]
         jdbc-opts)
       (jdbc/execute! conn
-        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.created_at, a.version
+        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version
           FROM articles a
           INNER JOIN (
             SELECT article_id, MAX(created_at) AS max_created_at
@@ -145,7 +147,7 @@
 (defn list-deleted-articles [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.created_at, a.version
+      ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version
         FROM articles a
         INNER JOIN (
           SELECT article_id, MAX(created_at) AS max_created_at

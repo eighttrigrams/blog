@@ -5,8 +5,8 @@ const BLOG_URL = "http://localhost:3028";
 const SUBSTACK_BASE = "https://eighttrigrams.substack.com";
 
 const ARTICLES = [
-  { slug: "clojure-tutorial", pubDate: "2022-05-06T18:18:00.000Z" },
-  { slug: "haskell-tutorial", pubDate: "2023-04-12T18:15:00.000Z" },
+  { slug: "clojure-tutorial", pubDate: "2022-05-06T18:18:00.000Z", github: "2022-05-06-clojure-tutorial.md" },
+  { slug: "haskell-tutorial", pubDate: "2023-04-12T18:15:00.000Z", github: "2023-04-12-haskell-tutorial.md" },
   { slug: "can-we-grasp-truth-as-a-whole", pubDate: "2023-06-11T22:55:00.000Z" },
   { slug: "categories-and-conflict", pubDate: "2023-07-15T19:02:00.000Z" },
   { slug: "schisms-schisms-and-more-schisms", pubDate: "2023-07-19T21:53:00.000Z" },
@@ -201,7 +201,7 @@ async function publishArticle(article, pubDateStr) {
   const dateFormatted = formatDate(pubDateStr);
   const originLine = `Originally published on Substack on ${dateFormatted}`;
 
-  const fullContent = `*${originLine}*\n\n\n${article.content}`;
+  const fullContent = article.content;
   const postContent = originLine;
 
   const footnotesField = article.footnotes
@@ -214,6 +214,7 @@ async function publishArticle(article, pubDateStr) {
   params.set("content", fullContent);
   params.set("footnotes", footnotesField);
   params.set("addenda", "");
+  params.set("preamble", originLine);
   params.set("post-content", postContent);
   params.set("publish", "on");
 
@@ -237,6 +238,25 @@ async function publishArticle(article, pubDateStr) {
   }
 }
 
+const LOCAL_POSTS_DIR = "/Users/daniel/Workspace/eighttrigrams/eighttrigrams.net/_posts";
+
+async function fetchGithubArticle(filename) {
+  const { readFileSync } = await import("fs");
+  console.log(`  Reading local file: ${filename}...`);
+  const raw = readFileSync(`${LOCAL_POSTS_DIR}/${filename}`, "utf8");
+
+  const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  if (!fmMatch) throw new Error("No frontmatter found");
+
+  const frontmatter = fmMatch[1];
+  const content = fmMatch[2].trim();
+
+  const titleMatch = frontmatter.match(/title:\s*"([^"]+)"/);
+  const title = titleMatch ? titleMatch[1] : filename;
+
+  return { title, subtitle: "", content, footnotes: [] };
+}
+
 async function main() {
   console.log("Substack -> Blog Import Pipeline");
   console.log("=================================\n");
@@ -250,7 +270,9 @@ async function main() {
   for (const entry of ARTICLES) {
     console.log(`\n--- ${entry.slug} (${formatDate(entry.pubDate)}) ---`);
 
-    const article = await fetchArticle(entry.slug);
+    const article = entry.github
+      ? await fetchGithubArticle(entry.github)
+      : await fetchArticle(entry.slug);
     console.log(`  Title: ${article.title}`);
     console.log(`  Subtitle: ${article.subtitle}`);
     console.log(`  Content length: ${article.content.length} chars`);

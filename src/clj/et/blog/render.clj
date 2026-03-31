@@ -81,6 +81,16 @@
            (str/join "\n" entries)
            "\n</ol></section>"))))
 
+(def ^:private image-base-url (atom nil))
+
+(defn set-image-base-url! [url]
+  (reset! image-base-url url))
+
+(defn- resolve-image-paths [html]
+  (if-let [base @image-base-url]
+    (str/replace html #"(src=\")(blog-images/)" (fn [[_ pre path]] (str pre base "/" path)))
+    html))
+
 (defn render-content [{:keys [content footnotes]} fetch-fn]
   (let [content (or content "")
         ref-ids (find-footnote-refs content)
@@ -89,5 +99,6 @@
         processed (resolve-citations content fetch-fn)
         html (or (markdown->html processed) "")
         html (replace-footnote-refs html ref-order def-map)
+        html (resolve-image-paths html)
         footnotes-html (render-footnotes-html ref-ids def-map)]
     (str html (or footnotes-html ""))))

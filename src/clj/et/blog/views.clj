@@ -58,6 +58,7 @@
         .post-permalink { color: #1a0dab; text-decoration: none; }
         .post-permalink:hover { text-decoration: underline; }
         .post-article-link { margin-top: 0.75rem; font-weight: 600; }
+        .article-preamble { margin-top: 1.5rem; font-style: italic; color: rgba(0,0,0,0.6); }
         .article-content { margin-top: 1.5rem; }
         .article-content img { max-width: 100%; height: auto; }
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
@@ -127,7 +128,7 @@
        (for [{:keys [article_id title created_at]} articles]
          [:li
           [:a {:href (str "/articles/" article_id)}
-           [:h2 (hu/escape-html title)]]
+           [:h2 title]]
           [:span.article-date created_at]])]
       [:p "No articles yet."])))
 
@@ -150,13 +151,13 @@
   (if (str/blank? text) 0
     (count (str/split (str/trim text) #"\s+"))))
 
-(defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda]}]
+(defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda rendered-preamble]}]
   (let [{:keys [article_id title subtitle created_at version content]} article]
     (layout {:title title :logged-in? logged-in?}
       [:article
-       [:h1 (hu/escape-html title)]
+       [:h1 title]
        (when (and subtitle (not= subtitle ""))
-         [:p.subtitle (hu/escape-html subtitle)])
+         [:p.subtitle subtitle])
        [:p.word-count (str (word-count content) " words")]
        (if (> (count versions) 1)
          (version-nav "/articles/" :article_id article (or current-version created_at) versions)
@@ -166,6 +167,8 @@
          (when logged-in? [:span.version-badge.draft "draft"]))
        (when logged-in?
          [:span " " [:a.btn.btn-small {:href (str "/articles/" article_id "/edit")} "Edit"]])
+       (when rendered-preamble
+         [:div.article-preamble (h/raw rendered-preamble)])
        [:div.article-content (h/raw rendered-content)]
        (when rendered-addenda
          [:div.article-section
@@ -203,6 +206,9 @@
         [:label {:for "subtitle"} "Subtitle"]
         [:input {:type "text" :name "subtitle" :id "subtitle" :value (or (:subtitle article) "")}]]
        [:div.form-group
+        [:label {:for "preamble"} "Preamble"]
+        [:input {:type "text" :name "preamble" :id "preamble" :value (or (:preamble article) "")}]]
+       [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content"} (or (:content article) "")]]
        [:div.form-group
@@ -231,7 +237,7 @@
           (when article-link
             [:p.post-article-link
              [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
-              (hu/escape-html (:title article-link))
+              (:title article-link)
               " \u2192"]])])]
       [:p "No posts yet."])))
 
@@ -248,7 +254,7 @@
        (when article-link
          [:p.post-article-link
           [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
-           (hu/escape-html (:title article-link))
+           (:title article-link)
            " \u2192"]])])))
 
 (defn edit-post-page [{:keys [post logged-in? new?]}]
@@ -293,7 +299,7 @@
       [:ul.article-list
        (for [{:keys [article_id title created_at]} articles]
          [:li
-          [:h2 (hu/escape-html title)]
+          [:h2 title]
           [:span.article-date created_at]])]
       [:p "No deleted articles."])))
 

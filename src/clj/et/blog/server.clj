@@ -100,12 +100,14 @@
       (let [versions (db/get-article-versions (ensure-ds) id {:published-only? pub?})
             fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
             rendered-content (render/render-content article fetch-fn)
-            rendered-addenda (render/markdown->html (:addenda article))]
+            rendered-addenda (render/markdown->html (:addenda article))
+            rendered-preamble (render/markdown->html (:preamble article))]
         (html-response 200
           (views/article-page {:article article :versions versions :logged-in? auth?
                                :current-version (:created_at article)
                                :rendered-content rendered-content
-                               :rendered-addenda rendered-addenda})))
+                               :rendered-addenda rendered-addenda
+                               :rendered-preamble rendered-preamble})))
       (html-response 404
         (views/not-found-page {:logged-in? auth?})))))
 
@@ -147,9 +149,10 @@
             content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             addenda (or (get-in req [:form-params "addenda"]) "")
+            preamble (or (get-in req [:form-params "preamble"]) "")
             post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
             publish? (some? (get-in req [:form-params "publish"]))
-            article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda}]
+            article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble}]
         (cond
           (str/blank? title)
           (html-response 400
@@ -186,9 +189,10 @@
             content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             addenda (or (get-in req [:form-params "addenda"]) "")
+            preamble (or (get-in req [:form-params "preamble"]) "")
             post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
             publish? (some? (get-in req [:form-params "publish"]))
-            article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda}]
+            article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble}]
         (cond
           (str/blank? title)
           (html-response 400
@@ -417,6 +421,8 @@
     (when (and (true? (:dangerously-skip-logins? @*config)) prod?)
       (throw (ex-info "Cannot use :dangerously-skip-logins? in production mode" {})))
     (tel/log! :info (str "Starting system in " (if prod? "production" "development") " mode"))
+    (when-let [base-url (:image-base-url @*config)]
+      (render/set-image-base-url! base-url))
     (ensure-ds)
     (when-not prod?
       (when-let [nrepl-port (:nrepl-port @*config)]

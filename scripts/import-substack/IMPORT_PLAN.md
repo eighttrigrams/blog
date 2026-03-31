@@ -64,6 +64,11 @@ node import.mjs --dry-run  # preview only
 - [ ] Verify images display (images use Substack CDN URLs)
 - [ ] Check for any stray Substack widget HTML in content
 
+## Intra-blog link rewriting
+- All `eighttrigrams.substack.com/p/{slug}` links rewritten to `/articles/{id}` (relative paths)
+- Slug → ID mapping applied to both `content` and `footnotes` columns via SQL REPLACE
+- `superhuman-memory` (deleted/renamed slug) mapped to article 21 (Rhizome)
+- After re-import, re-run the slug→ID replacements (or add to import script)
+
 ## Known limitations
 - Images still reference Substack CDN — if Substack goes away, images break
-- Intra-Substack links (e.g. footnotes linking to other Substack articles like Personalist, Rhizome) are not rewritten to local blog URLs (those articles don't exist locally)

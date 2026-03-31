@@ -1,0 +1,4 @@
+{:id "008-add-preamble"
+ :up ["ALTER TABLE articles ADD COLUMN preamble TEXT NOT NULL DEFAULT ''"]
+ :down ["ALTER TABLE articles DROP COLUMN preamble"]
+ :transactions false}
