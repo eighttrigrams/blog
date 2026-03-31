@@ -1,6 +1,7 @@
 (ns et.blog.db
   (:require [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
+            [clojure.string :as str]
             [et.blog.migrations :as migrations]
             [honey.sql :as sql]))
 
@@ -31,7 +32,7 @@
                  jdbc-opts)]
     (inc (first (vals result)))))
 
-(defn create-article! [ds {:keys [title subtitle content footnotes addenda preamble publish? post-content]}]
+(defn create-article! [ds {:keys [title subtitle content footnotes addenda preamble preview-image abstract publish? post-content]}]
   (let [conn (get-conn ds)
         article-id (next-article-id ds)
         version (if publish? 1 0)]
@@ -48,7 +49,9 @@
       jdbc-opts)
     (jdbc/execute-one! conn
       (sql/format {:insert-into :article_meta
-                   :values [{:article_id article-id}]})
+                   :values [{:article_id article-id
+                             :preview_image (or preview-image "")
+                             :abstract (or abstract "")}]})
       jdbc-opts)
     (when (and publish? post-content)
       (let [post-id (next-post-id ds)]
@@ -81,7 +84,7 @@
                  jdbc-opts)]
     (or (:version result) 0)))
 
-(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda preamble publish? post-content]}]
+(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda preamble preview-image abstract publish? post-content]}]
   (let [conn (get-conn ds)
         cur (current-version ds article-id)
         version (if publish? (inc cur) cur)]
@@ -96,6 +99,14 @@
                              :preamble (or preamble "")
                              :version version}]})
       jdbc-opts)
+    (let [meta-updates (cond-> {}
+                        preview-image (assoc :preview_image preview-image)
+                        abstract (assoc :abstract abstract))]
+      (when (seq meta-updates)
+        (jdbc/execute-one! conn
+          (sql/format {:update :article_meta
+                       :set meta-updates
+                       :where [:= :article_id article-id]}))))
     (when (and publish? post-content)
       (let [post-id (next-post-id ds)]
         (jdbc/execute-one! conn
@@ -117,11 +128,15 @@
 
 (def ^:private article-cols [:article_id :title :subtitle :content :footnotes :addenda :preamble :created_at :version])
 
+(defn- article-select-cols []
+  (into (mapv #(keyword (str "a." (name %))) article-cols)
+        [:am.preview_image :am.abstract]))
+
 (defn list-articles [ds {:keys [published-only?]}]
   (let [conn (get-conn ds)]
     (if published-only?
       (jdbc/execute! conn
-        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version
+        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version, am.preview_image, am.abstract
           FROM articles a
           INNER JOIN (
             SELECT article_id, MAX(created_at) AS max_created_at
@@ -133,7 +148,7 @@
           ORDER BY a.created_at DESC"]
         jdbc-opts)
       (jdbc/execute! conn
-        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version
+        ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version, am.preview_image, am.abstract
           FROM articles a
           INNER JOIN (
             SELECT article_id, MAX(created_at) AS max_created_at
@@ -147,7 +162,7 @@
 (defn list-deleted-articles [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version
+      ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version, am.preview_image, am.abstract
         FROM articles a
         INNER JOIN (
           SELECT article_id, MAX(created_at) AS max_created_at
@@ -164,7 +179,7 @@
         base (if published-only? (conj base [:> :a.version 0]) base)
         base (if include-deleted? base (conj base [:= :am.deleted 0]))]
     (jdbc/execute-one! conn
-      (sql/format {:select (mapv #(keyword (str "a." (name %))) article-cols)
+      (sql/format {:select (article-select-cols)
                    :from [[:articles :a]]
                    :join [[:article_meta :am] [:= :am.article_id :a.article_id]]
                    :where base
@@ -177,7 +192,7 @@
         base [:and [:= :a.article_id article-id] [:<= :a.created_at as-of]]
         base (if include-deleted? base (conj base [:= :am.deleted 0]))]
     (jdbc/execute-one! conn
-      (sql/format {:select (mapv #(keyword (str "a." (name %))) article-cols)
+      (sql/format {:select (article-select-cols)
                    :from [[:articles :a]]
                    :join [[:article_meta :am] [:= :am.article_id :a.article_id]]
                    :where base
@@ -190,7 +205,7 @@
         base [:and [:= :a.article_id article-id] [:= :a.version version]]
         base (if include-deleted? base (conj base [:= :am.deleted 0]))]
     (jdbc/execute-one! conn
-      (sql/format {:select (mapv #(keyword (str "a." (name %))) article-cols)
+      (sql/format {:select (article-select-cols)
                    :from [[:articles :a]]
                    :join [[:article_meta :am] [:= :am.article_id :a.article_id]]
                    :where base
@@ -204,7 +219,7 @@
         base (if published-only? (conj base [:> :a.version 0]) base)
         base (if include-deleted? base (conj base [:= :am.deleted 0]))]
     (jdbc/execute! conn
-      (sql/format {:select (mapv #(keyword (str "a." (name %))) article-cols)
+      (sql/format {:select (article-select-cols)
                    :from [[:articles :a]]
                    :join [[:article_meta :am] [:= :am.article_id :a.article_id]]
                    :where base
@@ -331,11 +346,12 @@
 (defn get-post-article-link [ds post-id]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      (sql/format {:select [:ap.article_id :ap.article_version :a.title]
+      (sql/format {:select [:ap.article_id :ap.article_version :a.title :a.subtitle :am.preview_image]
                    :from [[:article_posts :ap]]
                    :join [[:articles :a] [:and
                                           [:= :a.article_id :ap.article_id]
-                                          [:= :a.version :ap.article_version]]]
+                                          [:= :a.version :ap.article_version]]
+                          [:article_meta :am] [:= :am.article_id :ap.article_id]]
                    :where [:= :ap.post_id post-id]
                    :order-by [[:a.created_at :desc]]
                    :limit 1})
@@ -360,12 +376,44 @@
     {}
     (let [conn (get-conn ds)
           rows (jdbc/execute! conn
-                 (sql/format {:select [:ap.post_id :ap.article_id :ap.article_version :a.title]
+                 (sql/format {:select [:ap.post_id :ap.article_id :ap.article_version :a.title :a.subtitle :am.preview_image]
                               :from [[:article_posts :ap]]
                               :join [[:articles :a] [:and
                                                      [:= :a.article_id :ap.article_id]
-                                                     [:= :a.version :ap.article_version]]]
+                                                     [:= :a.version :ap.article_version]]
+                                     [:article_meta :am] [:= :am.article_id :ap.article_id]]
                               :where [:in :ap.post_id post-ids]
                               :order-by [[:a.created_at :desc]]})
                  jdbc-opts)]
       (into {} (map (fn [r] [(:post_id r) r]) rows)))))
+
+(defn get-articles-post-content [ds article-ids]
+  (if (empty? article-ids)
+    {}
+    (let [conn (get-conn ds)]
+      (->> (jdbc/execute! conn
+             (sql/format {:select [:ap.article_id :p.content]
+                          :from [[:article_posts :ap]]
+                          :join [[:posts :p] [:= :p.post_id :ap.post_id]]
+                          :where [:in :ap.article_id article-ids]
+                          :order-by [[:p.created_at :desc]]})
+             jdbc-opts)
+           (reduce (fn [m r] (if (contains? m (:article_id r)) m (assoc m (:article_id r) (:content r)))) {})))))
+
+(defn get-articles-latest-post-dates [ds article-ids]
+  (if (empty? article-ids)
+    {}
+    (let [conn (get-conn ds)
+          placeholders (str/join "," (repeat (count article-ids) "?"))
+          sql-str (str "SELECT ap.article_id, ap.article_version, MIN(p.created_at) as published_at
+                        FROM article_posts ap
+                        INNER JOIN posts p ON p.post_id = ap.post_id
+                        INNER JOIN (
+                          SELECT article_id, MAX(article_version) as max_version
+                          FROM article_posts
+                          GROUP BY article_id
+                        ) latest ON ap.article_id = latest.article_id AND ap.article_version = latest.max_version
+                        WHERE ap.article_id IN (" placeholders ")
+                        GROUP BY ap.article_id")]
+      (->> (jdbc/execute! conn (into [sql-str] article-ids) jdbc-opts)
+           (reduce (fn [m r] (assoc m (:article_id r) r)) {})))))

@@ -1,0 +1,4 @@
+{:id "010-add-abstract"
+ :up ["ALTER TABLE article_meta ADD COLUMN abstract TEXT NOT NULL DEFAULT ''"]
+ :down ["ALTER TABLE article_meta DROP COLUMN abstract"]
+ :transactions false}

@@ -1,7 +1,8 @@
 (ns et.blog.views
   (:require [clojure.string :as str]
             [hiccup2.core :as h]
-            [hiccup.util :as hu])
+            [hiccup.util :as hu]
+            [et.blog.render :as render])
   (:import [java.time LocalDateTime]
            [java.time.format DateTimeFormatter]))
 
@@ -48,6 +49,14 @@
         .article-list a { color: rgba(0,0,0,0.8); }
         .article-list a:hover h2 { color: #FD5353; }
         .article-date { color: rgba(0,0,0,0.4); font-size: 0.9rem; }
+        .article-preview { max-width: 300px; height: auto; margin-top: 0.5rem; display: block; }
+        .article-version-info { color: rgba(0,0,0,0.4); font-size: 0.85rem; margin: 0 0 0.3rem 0; }
+        .article-summary { color: rgba(0,0,0,0.5); font-size: 0.95rem; margin-top: 0.3rem; }
+        .article-row { display: flex; gap: 1rem; margin-top: 0.5rem; }
+        .article-row .article-preview { max-width: 100%; flex-shrink: 0; margin-top: 0; }
+        .article-row-left { width: 50%; }
+        .article-row-right { width: 50%; }
+        .article-row-right p:first-child { margin-top: 0; }
         .post-list { list-style: none; padding: 0; }
         .post-list li { margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
         .post-list li:last-child { border-bottom: none; }
@@ -125,11 +134,26 @@
   (layout {:title nil :logged-in? logged-in?}
     (if (seq articles)
       [:ul.article-list
-       (for [{:keys [article_id title created_at]} articles]
+       (for [{:keys [article_id title subtitle preview_image abstract latest-version latest-published-at]} articles]
          [:li
           [:a {:href (str "/articles/" article_id)}
            [:h2 title]]
-          [:span.article-date created_at]])]
+          (when (and subtitle (not= subtitle ""))
+            [:p.subtitle subtitle])
+          (let [has-img (and preview_image (not= preview_image ""))
+                has-abs (and abstract (not= abstract ""))
+                has-ver (and latest-version latest-published-at)]
+            (when (or has-img has-abs has-ver)
+              [:div.article-row
+               (when has-img
+                 [:div.article-row-left
+                  [:img.article-preview {:src preview_image :alt title}]])
+               [:div.article-row-right
+                (when has-ver
+                  [:p.article-version-info
+                   (str "Latest version " latest-version " published on " (human-date latest-published-at))])
+                (when has-abs
+                  [:div.article-summary (h/raw (render/markdown->html abstract))])]]))])]
       [:p "No articles yet."])))
 
 (defn- version-nav [base-path id-key entity created_at versions]
@@ -209,6 +233,12 @@
         [:label {:for "preamble"} "Preamble"]
         [:input {:type "text" :name "preamble" :id "preamble" :value (or (:preamble article) "")}]]
        [:div.form-group
+        [:label {:for "preview-image"} "Preview Image"]
+        [:input {:type "text" :name "preview-image" :id "preview-image" :value (or (:preview_image article) "")}]]
+       [:div.form-group
+        [:label {:for "abstract"} "Abstract"]
+        [:textarea {:name "abstract" :id "abstract" :style "min-height: 80px;"} (or (:abstract article) "")]]
+       [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content"} (or (:content article) "")]]
        [:div.form-group
@@ -235,10 +265,16 @@
              [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"])]
           [:div.article-content (h/raw rendered-content)]
           (when article-link
-            [:p.post-article-link
-             [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
-              (:title article-link)
-              " \u2192"]])])]
+            (list
+              (when-let [img (not-empty (:preview_image article-link))]
+                [:a {:href (str "/articles/" (:article_id article-link))}
+                 [:img.article-preview {:src img :alt (:title article-link)}]])
+              [:p.post-article-link
+               [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
+                (:title article-link)
+                " \u2192"]]
+              (when-let [sub (not-empty (:subtitle article-link))]
+                [:p.subtitle sub])))])]
       [:p "No posts yet."])))
 
 (defn post-page [{:keys [post versions logged-in? current-version rendered-content article-link]}]
@@ -252,10 +288,16 @@
          [:span [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"]])
        [:div.article-content (h/raw rendered-content)]
        (when article-link
-         [:p.post-article-link
-          [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
-           (:title article-link)
-           " \u2192"]])])))
+         (list
+           (when-let [img (not-empty (:preview_image article-link))]
+             [:a {:href (str "/articles/" (:article_id article-link))}
+              [:img.article-preview {:src img :alt (:title article-link)}]])
+           [:p.post-article-link
+            [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
+             (:title article-link)
+             " \u2192"]]
+           (when-let [sub (not-empty (:subtitle article-link))]
+             [:p.subtitle sub])))])))
 
 (defn edit-post-page [{:keys [post logged-in? new?]}]
   (let [action (if new? "/posts" (str "/posts/" (:post_id post)))]

@@ -74,9 +74,23 @@
 (defn- redirect [url]
   {:status 302 :headers {"Location" url}})
 
+(defn- resolve-preview-image [article]
+  (if-let [img (not-empty (:preview_image article))]
+    (let [base (or (:image-base-url @*config) "")]
+      (assoc article :preview_image (str base "/" img)))
+    article))
+
 (defn- home-handler [req]
   (let [auth? (logged-in? req)
-        articles (db/list-articles (ensure-ds) {:published-only? (not auth?)})]
+        articles (db/list-articles (ensure-ds) {:published-only? (not auth?)})
+        article-ids (mapv :article_id articles)
+        post-dates (db/get-articles-latest-post-dates (ensure-ds) article-ids)
+        articles (->> articles
+                      (mapv #(let [pd (get post-dates (:article_id %))]
+                               (-> %
+                                   resolve-preview-image
+                                   (assoc :latest-version (:article_version pd))
+                                   (assoc :latest-published-at (:published_at pd))))))]
     (html-response 200
       (views/home-page {:articles articles :logged-in? auth?}))))
 
@@ -150,9 +164,11 @@
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             addenda (or (get-in req [:form-params "addenda"]) "")
             preamble (or (get-in req [:form-params "preamble"]) "")
+            preview-image (or (get-in req [:form-params "preview-image"]) "")
+            abstract (or (get-in req [:form-params "abstract"]) "")
             post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
             publish? (some? (get-in req [:form-params "publish"]))
-            article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble}]
+            article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract}]
         (cond
           (str/blank? title)
           (html-response 400
@@ -190,9 +206,11 @@
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             addenda (or (get-in req [:form-params "addenda"]) "")
             preamble (or (get-in req [:form-params "preamble"]) "")
+            preview-image (or (get-in req [:form-params "preview-image"]) "")
+            abstract (or (get-in req [:form-params "abstract"]) "")
             post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
             publish? (some? (get-in req [:form-params "publish"]))
-            article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble}]
+            article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract}]
         (cond
           (str/blank? title)
           (html-response 400
@@ -237,6 +255,12 @@
 
 ;; --- Posts ---
 
+(defn- resolve-link-preview [link]
+  (if-let [img (not-empty (:preview_image link))]
+    (let [base (or (:image-base-url @*config) "")]
+      (assoc link :preview_image (str base "/" img)))
+    link))
+
 (defn- posts-handler [req]
   (let [auth? (logged-in? req)
         fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
@@ -246,7 +270,7 @@
         posts (->> posts
                    (mapv #(assoc %
                             :rendered-content (render/render-content % fetch-fn)
-                            :article-link (get article-links (:post_id %)))))]
+                            :article-link (some-> (get article-links (:post_id %)) resolve-link-preview))))]
     (html-response 200
       (views/posts-page {:posts posts :logged-in? auth?}))))
 
@@ -261,7 +285,7 @@
       (let [versions (if auth? (db/get-post-versions (ensure-ds) id {}) [post])
             fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
             rendered-content (render/render-content post fetch-fn)
-            article-link (db/get-post-article-link (ensure-ds) id)]
+            article-link (some-> (db/get-post-article-link (ensure-ds) id) resolve-link-preview)]
         (html-response 200
           (views/post-page {:post post :versions versions :logged-in? auth?
                             :current-version (:created_at post)

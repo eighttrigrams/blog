@@ -1,0 +1,4 @@
+{:id "009-add-preview-image"
+ :up ["ALTER TABLE article_meta ADD COLUMN preview_image TEXT NOT NULL DEFAULT ''"]
+ :down ["ALTER TABLE article_meta DROP COLUMN preview_image"]
+ :transactions false}
