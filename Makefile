@@ -4,7 +4,7 @@ restart:
 	@lsof -ti :3028 | xargs kill 2>/dev/null; sleep 1 && DEV=true clj -M -m et.blog.server &
 
 deploy: backup
-	fly deploy --build-arg CACHE_BUST=$$(git rev-parse --short HEAD)
+	fly deploy
 
 backup:
 	@mkdir -p .backups
