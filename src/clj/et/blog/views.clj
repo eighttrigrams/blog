@@ -38,6 +38,7 @@
         nav a { color: rgba(0,0,0,0.8); margin-right: 1.25rem; }
         nav a:hover { color: #FD5353; }
         .nav-right { display: flex; align-items: center; gap: 0.75rem; }
+        .action-link { color: #FD5353; }
         .feed-icon { color: rgba(0,0,0,0.4); display: flex; align-items: center; }
         .feed-icon:hover { color: #FD5353; text-decoration: none; }
         h1 { font-size: 2rem; font-weight: 600; line-height: 1.3; margin-bottom: 0.5rem; }
@@ -158,7 +159,7 @@
 (defn drafts-page [{:keys [articles logged-in?]}]
   (layout {:title "Drafts" :logged-in? logged-in?}
     [:div
-     [:p [:a {:href "/articles/new"} "New Article"]]
+     [:p [:a.action-link {:href "/articles/new"} "New Article"]]
      (if (seq articles)
        [:ul.article-list
         (for [{:keys [article_id title subtitle]} articles]
@@ -269,7 +270,7 @@
   (layout {:title "Posts" :logged-in? logged-in?}
     [:h1 "Posts"]
     (when logged-in?
-      [:p [:a {:href "/posts/new"} "New Post"]])
+      [:p [:a.action-link {:href "/posts/new"} "New Post"]])
     (if (seq posts)
       [:ul.post-list
        (for [{:keys [post_id created_at first_at rendered-content article-link resolved-image]} posts]
