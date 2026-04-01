@@ -1,6 +1,5 @@
 (ns et.blog.mail
-  (:require [postal.core :as postal]
-            [com.taoensso.telemere :as tel]))
+  (:require [postal.core :as postal]))
 
 (defn- smtp-config []
   {:host (or (System/getenv "SMTP_HOST") "w00cbd36.kasserver.com")
@@ -19,6 +18,6 @@
              :to email
              :subject (str "New article: " title)
              :body (str "A new article has been published: " title "\n\n" article-url)})
-          (tel/log! :info (str "Sent notification to " email))
+          (println (str "Sent notification to " email))
           (catch Exception e
-            (tel/log! :error (str "Failed to send to " email ": " (.getMessage e)))))))))
+            (println (str "Failed to send to " email ": " (.getMessage e)))))))))
