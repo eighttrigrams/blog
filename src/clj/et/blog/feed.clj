@@ -35,13 +35,20 @@
                   content-html (nth rendered-posts idx "")]
               (str
                 "  <entry>\n"
-                "    <title>" (if link (xml-escape (:title link)) (str "Post " post-id)) "</title>\n"
+                "    <title>" (if link
+                                (let [t (xml-escape (:title link))
+                                      s (:subtitle link)
+                                      v (:article_version link)
+                                      base (if (and s (not= s ""))
+                                             (str t " \u2014 " (xml-escape s))
+                                             t)]
+                                  (if (and v (> v 1))
+                                    (str base " (v" v ")")
+                                    base))
+                                (str "Post " post-id)) "</title>\n"
                 "    <link href=\"" (xml-escape post-url) "\"/>\n"
                 "    <id>" (xml-escape (str site-url "/posts/" post-id)) "</id>\n"
                 "    <updated>" (iso-date created) "</updated>\n"
-                (when-let [sub (and link (xml-escape (:subtitle link)))]
-                  (when (not= sub "")
-                    (str "    <summary>" sub "</summary>\n")))
                 "    <content type=\"html\">" (xml-escape content-html) "</content>\n"
                 "  </entry>\n")))
           posts))
