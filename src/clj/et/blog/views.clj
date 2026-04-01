@@ -132,6 +132,7 @@
 
 (defn home-page [{:keys [articles logged-in?]}]
   (layout {:title nil :logged-in? logged-in?}
+    [:h1 "Articles"]
     (if (seq articles)
       [:ul.article-list
        (for [{:keys [article_id title subtitle preview_image abstract latest-version latest-published-at]} articles]
