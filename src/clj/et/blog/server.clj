@@ -6,6 +6,7 @@
             [et.blog.render :as render]
             [et.blog.feed :as feed]
             [et.blog.mail :as mail]
+            [et.blog.tracker :as tracker]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
             [clojure.string :as str]
@@ -437,6 +438,11 @@
         (views/email-page (email-page-data req {:notice "Please fill in all fields."})))
       (do
         (db/create-message! (ensure-ds) email message)
+        (future
+          (try
+            (tracker/send-message! "Blog message" message email)
+            (catch Exception e
+              (println "Failed to forward to tracker:" (.getMessage e)))))
         (html-response 200
           (views/email-page (email-page-data req {:notice "Message sent!"})))))))
 
