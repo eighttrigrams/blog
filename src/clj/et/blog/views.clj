@@ -66,8 +66,8 @@
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
         .article-content code { background: rgba(0,0,0,0.05); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
         .article-content pre code { display: block; padding: 1rem; overflow-x: auto; }
-        .article-section { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; }
-        .article-section h3 { font-size: 1.1rem; font-weight: 600; color: rgba(0,0,0,0.6); margin-bottom: 0; }
+        .article-section { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.35); padding-top: 1rem; }
+        .article-section h3 { font-size: 1rem; font-weight: 600; font-style: italic; color: rgba(0,0,0,0.65); margin-bottom: 0; }
         .footnotes { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; }
         .footnotes h3 { font-size: 1rem; font-weight: 600; color: rgba(0,0,0,0.6); }
         .footnotes ol { padding-left: 1.5rem; font-size: 0.95rem; color: rgba(0,0,0,0.7); }
@@ -242,7 +242,7 @@
        [:div.article-content (h/raw rendered-content)]
        (when rendered-addenda
          [:div.article-section
-          [:h3 "Addenda"]
+          [:h3 "Addenda:"]
           [:div.article-content (h/raw rendered-addenda)]])])))
 
 (defn login-page [{:keys [error]}]
