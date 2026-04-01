@@ -72,12 +72,16 @@
                 post-body (get post-contents [article_id version] "")]
             (str
               "  <entry>\n"
-              "    <title>" (xml-escape (str title " (v" version ")")) "</title>\n"
+              "    <title>" (let [t (xml-escape title)
+                                  base (if (and subtitle (not= subtitle ""))
+                                         (str t " \u2014 " (xml-escape subtitle))
+                                         t)]
+                              (if (> version 1)
+                                (str base " (v" version ")")
+                                base)) "</title>\n"
               "    <link href=\"" (xml-escape article-url) "\"/>\n"
               "    <id>" (xml-escape (str site-url "/articles/" article_id "/v" version)) "</id>\n"
               "    <updated>" (iso-date created_at) "</updated>\n"
-              (when (and subtitle (not= subtitle ""))
-                (str "    <summary>" (xml-escape subtitle) "</summary>\n"))
               "    <content type=\"html\">" (xml-escape post-body) "</content>\n"
               "  </entry>\n"))))
       "</feed>\n")))
