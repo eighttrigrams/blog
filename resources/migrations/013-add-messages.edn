@@ -1,0 +1,8 @@
+{:id "013-add-messages"
+ :up ["CREATE TABLE IF NOT EXISTS messages (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         email TEXT NOT NULL,
+         message TEXT NOT NULL,
+         created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))"]
+ :down ["DROP TABLE IF EXISTS messages"]
+ :transactions false}

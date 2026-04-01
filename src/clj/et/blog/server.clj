@@ -5,6 +5,7 @@
             [et.blog.views :as views]
             [et.blog.render :as render]
             [et.blog.feed :as feed]
+            [et.blog.mail :as mail]
             [clojure.java.io :as io]
             [clojure.edn :as edn]
             [clojure.string :as str]
@@ -194,6 +195,11 @@
           :else
           (let [article-id (db/create-article! (ensure-ds) (merge article {:publish? publish?
                                                                             :post-content (when publish? post-content)}))]
+            (when publish?
+              (future
+                (let [subscribers (db/list-email-subscribers (ensure-ds))
+                      base (site-url req)]
+                  (mail/send-article-notification! subscribers title (str base "/articles/" article-id)))))
             (redirect (str "/articles/" article-id))))))))
 
 (defn- edit-article-handler [req]
@@ -237,6 +243,11 @@
           (do
             (db/update-article! (ensure-ds) id (merge article {:publish? publish?
                                                                 :post-content (when publish? post-content)}))
+            (when publish?
+              (future
+                (let [subscribers (db/list-email-subscribers (ensure-ds))
+                      base (site-url req)]
+                  (mail/send-article-notification! subscribers title (str base "/articles/" id)))))
             (redirect (str "/articles/" id))))))))
 
 (defn- confirm-delete-article-handler [req]
@@ -392,9 +403,46 @@
                             :article-links article-links
                             :rendered-posts rendered})}))
 
-(defn- feed-all-handler [req]
-  (let [posts (db/list-posts (ensure-ds))]
-    (build-feed req "Blog - All Posts" "/feed.xml" posts)))
+(defn- email-page-data [req opts]
+  (let [auth? (logged-in? req)]
+    (merge {:logged-in? auth?
+            :messages (when auth? (db/list-messages (ensure-ds)))
+            :subscribers (when auth? (db/list-email-subscribers (ensure-ds)))}
+           opts)))
+
+(defn- email-page-handler [req]
+  (html-response 200
+    (views/email-page (email-page-data req {}))))
+
+(defn- email-submit-handler [req]
+  (let [email (str/trim (or (get-in req [:form-params "email"]) ""))
+        action (get-in req [:form-params "action"])]
+    (if (str/blank? email)
+      (html-response 400
+        (views/email-page (email-page-data req {:notice "Please enter an email address."})))
+      (do
+        (if (= action "unsubscribe")
+          (db/unsubscribe-email! (ensure-ds) email)
+          (db/subscribe-email! (ensure-ds) email))
+        (html-response 200
+          (views/email-page (email-page-data req {:notice (if (= action "unsubscribe")
+                                                            "You have been unsubscribed."
+                                                            "Thanks for subscribing!")})))))))
+
+(defn- message-submit-handler [req]
+  (let [email (str/trim (or (get-in req [:form-params "email"]) ""))
+        message (str/trim (or (get-in req [:form-params "message"]) ""))]
+    (if (or (str/blank? email) (str/blank? message))
+      (html-response 400
+        (views/email-page (email-page-data req {:notice "Please fill in all fields."})))
+      (do
+        (db/create-message! (ensure-ds) email message)
+        (html-response 200
+          (views/email-page (email-page-data req {:notice "Message sent!"})))))))
+
+(defn- feed-posts-handler [req]
+  (let [posts (db/list-standalone-posts (ensure-ds))]
+    (build-feed req "Blog - Posts" "/feed/posts.xml" posts)))
 
 (defn- feed-articles-handler [req]
   (let [posts (db/list-article-posts (ensure-ds))]
@@ -435,7 +483,10 @@
   (GET "/posts/:id/delete" [] confirm-delete-post-handler)
   (POST "/posts/:id/delete" [] delete-post-handler)
   (POST "/posts/:id" [] update-post-handler)
-  (GET "/feed.xml" [] feed-all-handler)
+  (GET "/email" [] email-page-handler)
+  (POST "/email" [] email-submit-handler)
+  (POST "/email/message" [] message-submit-handler)
+  (GET "/feed/posts.xml" [] feed-posts-handler)
   (GET "/feed/articles.xml" [] feed-articles-handler)
   (route/resources "/")
   (route/not-found (fn [_] (html-response 404 (views/not-found-page {:logged-in? false})))))

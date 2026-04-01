@@ -354,6 +354,22 @@
                    :order-by [[:p.created_at :desc]]})
       jdbc-opts)))
 
+(defn list-standalone-posts [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, latest.first_at
+        FROM posts p
+        INNER JOIN (
+          SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
+          FROM posts
+          GROUP BY post_id
+        ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
+        INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 0
+        LEFT JOIN article_posts ap ON ap.post_id = p.post_id
+        WHERE ap.post_id IS NULL
+        ORDER BY latest.first_at DESC"]
+      jdbc-opts)))
+
 (defn list-article-posts [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
@@ -443,3 +459,30 @@
                         GROUP BY ap.article_id")]
       (->> (jdbc/execute! conn (into [sql-str] article-ids) jdbc-opts)
            (reduce (fn [m r] (assoc m (:article_id r) r)) {})))))
+
+(defn subscribe-email! [ds email]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["INSERT OR IGNORE INTO email_subscribers (email) VALUES (?)" email])))
+
+(defn unsubscribe-email! [ds email]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["DELETE FROM email_subscribers WHERE email = ?" email])))
+
+(defn list-email-subscribers [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT email, created_at FROM email_subscribers ORDER BY created_at DESC"]
+      jdbc-opts)))
+
+(defn create-message! [ds email message]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["INSERT INTO messages (email, message) VALUES (?, ?)" email message])))
+
+(defn list-messages [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT id, email, message, created_at FROM messages ORDER BY created_at DESC"]
+      jdbc-opts)))
