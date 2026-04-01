@@ -441,7 +441,7 @@
           (views/email-page (email-page-data req {:notice "Message sent!"})))))))
 
 (defn- feed-posts-handler [req]
-  (let [posts (db/list-standalone-posts (ensure-ds))]
+  (let [posts (db/list-posts (ensure-ds))]
     (build-feed req "Blog - Posts" "/feed/posts.xml" posts)))
 
 (defn- feed-articles-handler [req]
