@@ -31,9 +31,7 @@
             (let [post-id (:post_id post)
                   created (or (:first_at post) (:created_at post))
                   link (get article-links post-id)
-                  post-url (if link
-                             (str site-url "/articles/" (:article_id link) "/version/" (:article_version link))
-                             (str site-url "/posts"))
+                  post-url (str site-url "/posts/" post-id)
                   content-html (nth rendered-posts idx "")]
               (str
                 "  <entry>\n"
