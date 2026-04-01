@@ -446,7 +446,7 @@
 
 (defn- feed-articles-handler [req]
   (let [articles (db/list-published-article-versions (ensure-ds))
-        rendered (mapv #(render/render-article-content %) articles)
+        post-contents (db/get-article-version-post-contents (ensure-ds))
         base (site-url req)]
     {:status 200
      :headers {"Content-Type" "application/atom+xml; charset=utf-8"}
@@ -454,7 +454,7 @@
                                 :feed-url (str base "/feed/articles.xml")
                                 :site-url base
                                 :articles articles
-                                :rendered-articles rendered})}))
+                                :post-contents post-contents})}))
 
 (defn- wrap-cookies [handler]
   (fn [req]

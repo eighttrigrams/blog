@@ -452,6 +452,15 @@
              jdbc-opts)
            (reduce (fn [m r] (if (contains? m (:article_id r)) m (assoc m (:article_id r) (:content r)))) {})))))
 
+(defn get-article-version-post-contents [ds]
+  (let [conn (get-conn ds)]
+    (->> (jdbc/execute! conn
+           (sql/format {:select [:ap.article_id :ap.article_version :p.content]
+                        :from [[:article_posts :ap]]
+                        :join [[:posts :p] [:= :p.post_id :ap.post_id]]})
+           jdbc-opts)
+         (reduce (fn [m r] (assoc m [(:article_id r) (:article_version r)] (:content r))) {}))))
+
 (defn get-articles-latest-post-dates [ds article-ids]
   (if (empty? article-ids)
     {}

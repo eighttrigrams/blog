@@ -46,7 +46,7 @@
           posts))
       "</feed>\n")))
 
-(defn articles-feed [{:keys [title feed-url site-url articles rendered-articles]}]
+(defn articles-feed [{:keys [title feed-url site-url articles post-contents]}]
   (let [updated (or (some-> (first articles) :created_at iso-date)
                     "1970-01-01T00:00:00Z")]
     (str
@@ -58,18 +58,18 @@
       "  <id>" (xml-escape feed-url) "</id>\n"
       "  <updated>" updated "</updated>\n"
       (str/join
-        (map-indexed
-          (fn [idx article]
-            (let [{:keys [article_id title version created_at]} article
-                  article-url (str site-url "/articles/" article_id "/version/" version)
-                  content-html (nth rendered-articles idx "")]
-              (str
-                "  <entry>\n"
-                "    <title>" (xml-escape (str title " (v" version ")")) "</title>\n"
-                "    <link href=\"" (xml-escape article-url) "\"/>\n"
-                "    <id>" (xml-escape (str site-url "/articles/" article_id "/v" version)) "</id>\n"
-                "    <updated>" (iso-date created_at) "</updated>\n"
-                "    <content type=\"html\">" (xml-escape content-html) "</content>\n"
-                "  </entry>\n")))
-          articles))
+        (for [article articles]
+          (let [{:keys [article_id title subtitle version created_at]} article
+                article-url (str site-url "/articles/" article_id "/version/" version)
+                post-body (get post-contents [article_id version] "")]
+            (str
+              "  <entry>\n"
+              "    <title>" (xml-escape (str title " (v" version ")")) "</title>\n"
+              "    <link href=\"" (xml-escape article-url) "\"/>\n"
+              "    <id>" (xml-escape (str site-url "/articles/" article_id "/v" version)) "</id>\n"
+              "    <updated>" (iso-date created_at) "</updated>\n"
+              (when (and subtitle (not= subtitle ""))
+                (str "    <summary>" (xml-escape subtitle) "</summary>\n"))
+              "    <content type=\"html\">" (xml-escape post-body) "</content>\n"
+              "  </entry>\n"))))
       "</feed>\n")))
