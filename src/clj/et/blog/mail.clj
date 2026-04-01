@@ -1,6 +1,7 @@
 (ns et.blog.mail
   (:require [postal.core :as postal]
-            [et.blog.render :as render]))
+            [et.blog.render :as render]
+            [clojure.string :as str]))
 
 (defn- smtp-config []
   {:host (or (System/getenv "SMTP_HOST") "w00cbd36.kasserver.com")
@@ -9,11 +10,17 @@
    :user (System/getenv "SMTP_USER")
    :pass (System/getenv "SMTP_PASSWORD")})
 
+(defn- downshift-headings [html]
+  (str/replace html #"<(/?)h([1-6])"
+    (fn [[_ slash level]]
+      (let [n (min 6 (+ (Integer/parseInt level) 2))]
+        (str "<" slash "h" n)))))
+
 (defn- build-html [title subtitle post-content article-url]
   (str "<h1>" title "</h1>"
        (when (and subtitle (not= subtitle ""))
-         (str "<p><em>" subtitle "</em></p>"))
-       (render/markdown->html post-content)
+         (str "<h2>" subtitle "</h2>"))
+       (downshift-headings (or (render/markdown->html post-content) ""))
        "<p><a href=\"" article-url "\">" article-url "</a></p>"))
 
 (defn send-article-notification! [subscribers title subtitle post-content article-url]
