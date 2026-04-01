@@ -440,7 +440,7 @@
         (db/create-message! (ensure-ds) email message)
         (future
           (try
-            (tracker/send-message! "Blog message" message email)
+            (tracker/send-message! (str "Blog message from \"" email "\"") message "eighttrigrams.net")
             (catch Exception e
               (println "Failed to forward to tracker:" (.getMessage e)))))
         (html-response 200
