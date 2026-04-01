@@ -41,6 +41,9 @@
                 "    <link href=\"" (xml-escape post-url) "\"/>\n"
                 "    <id>" (xml-escape (str site-url "/posts/" post-id)) "</id>\n"
                 "    <updated>" (iso-date created) "</updated>\n"
+                (when-let [sub (and link (xml-escape (:subtitle link)))]
+                  (when (not= sub "")
+                    (str "    <summary>" sub "</summary>\n")))
                 "    <content type=\"html\">" (xml-escape content-html) "</content>\n"
                 "  </entry>\n")))
           posts))
