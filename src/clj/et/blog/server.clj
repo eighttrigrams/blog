@@ -445,8 +445,16 @@
     (build-feed req "Blog - Posts" "/feed/posts.xml" posts)))
 
 (defn- feed-articles-handler [req]
-  (let [posts (db/list-article-posts (ensure-ds))]
-    (build-feed req "Blog - Article Publications" "/feed/articles.xml" posts)))
+  (let [articles (db/list-published-article-versions (ensure-ds))
+        rendered (mapv #(render/render-article-content %) articles)
+        base (site-url req)]
+    {:status 200
+     :headers {"Content-Type" "application/atom+xml; charset=utf-8"}
+     :body (feed/articles-feed {:title "Blog - Articles"
+                                :feed-url (str base "/feed/articles.xml")
+                                :site-url base
+                                :articles articles
+                                :rendered-articles rendered})}))
 
 (defn- wrap-cookies [handler]
   (fn [req]

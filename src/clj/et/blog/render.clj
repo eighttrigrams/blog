@@ -102,3 +102,6 @@
         html (resolve-image-paths html)
         footnotes-html (render-footnotes-html ref-ids def-map)]
     (str html (or footnotes-html ""))))
+
+(defn render-article-content [{:keys [content]}]
+  (or (markdown->html (or content "")) ""))

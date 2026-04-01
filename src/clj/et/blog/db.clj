@@ -183,6 +183,16 @@
         ORDER BY a.created_at DESC"]
       jdbc-opts)))
 
+(defn list-published-article-versions [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version, am.preview_image, am.abstract
+        FROM articles a
+        INNER JOIN article_meta am ON am.article_id = a.article_id AND am.deleted = 0
+        WHERE a.version > 0
+        ORDER BY a.created_at DESC"]
+      jdbc-opts)))
+
 (defn list-deleted-articles [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
