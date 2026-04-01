@@ -149,6 +149,11 @@
    :headers {"Location" "/"
              "Set-Cookie" "token=; Path=/; HttpOnly; Max-Age=0"}})
 
+(defn- site-url [req]
+  (let [scheme (or (get-in req [:headers "x-forwarded-proto"]) "http")
+        host (get-in req [:headers "host"] "localhost")]
+    (str scheme "://" host)))
+
 (defn- require-login [req handler]
   (if (logged-in? req)
     (handler req)
@@ -382,11 +387,6 @@
                                 :article-link (get article-links (:post_id %)))))]
         (html-response 200
           (views/deleted-posts-page {:posts posts :logged-in? true}))))))
-
-(defn- site-url [req]
-  (let [scheme (or (get-in req [:headers "x-forwarded-proto"]) "http")
-        host (get-in req [:headers "host"] "localhost")]
-    (str scheme "://" host)))
 
 (defn- build-feed [req title feed-path posts]
   (let [fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
