@@ -204,7 +204,7 @@
               (future
                 (let [subscribers (db/list-email-subscribers (ensure-ds))
                       base (site-url req)]
-                  (mail/send-article-notification! subscribers title (str base "/articles/" article-id)))))
+                  (mail/send-article-notification! subscribers title subtitle post-content (str base "/articles/" article-id)))))
             (redirect (str "/articles/" article-id))))))))
 
 (defn- edit-article-handler [req]
@@ -252,7 +252,7 @@
               (future
                 (let [subscribers (db/list-email-subscribers (ensure-ds))
                       base (site-url req)]
-                  (mail/send-article-notification! subscribers title (str base "/articles/" id)))))
+                  (mail/send-article-notification! subscribers title subtitle post-content (str base "/articles/" id)))))
             (redirect (str "/articles/" id))))))))
 
 (defn- confirm-delete-article-handler [req]
