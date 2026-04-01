@@ -1,6 +1,7 @@
 (ns et.blog.feed
   (:require [clojure.string :as str]
-            [hiccup.util :as hu]))
+            [hiccup.util :as hu]
+            [et.blog.util :refer [human-date]]))
 
 (defn- xml-escape [s]
   (when s
@@ -45,7 +46,7 @@
                                   (if (and v (> v 1))
                                     (str base " (v" v ")")
                                     base))
-                                (str "Post " post-id)) "</title>\n"
+                                (human-date created)) "</title>\n"
                 "    <link href=\"" (xml-escape post-url) "\"/>\n"
                 "    <id>" (xml-escape (str site-url "/posts/" post-id)) "</id>\n"
                 "    <updated>" (iso-date created) "</updated>\n"

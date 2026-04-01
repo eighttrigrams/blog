@@ -2,16 +2,8 @@
   (:require [clojure.string :as str]
             [hiccup2.core :as h]
             [hiccup.util :as hu]
-            [et.blog.render :as render])
-  (:import [java.time LocalDateTime]
-           [java.time.format DateTimeFormatter]))
-
-(def ^:private human-date-fmt (DateTimeFormatter/ofPattern "MMMM d, yyyy"))
-
-(defn- human-date [datetime-str]
-  (when datetime-str
-    (let [dt (LocalDateTime/parse datetime-str (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
-      (.format dt human-date-fmt))))
+            [et.blog.render :as render]
+            [et.blog.util :refer [human-date]]))
 
 (defn layout [{:keys [title logged-in?]} & body]
   (str
