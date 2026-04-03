@@ -88,7 +88,13 @@
 
 (defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda preamble preview-image abstract publish? post-content]}]
   (let [conn (get-conn ds)
-        current (get-article ds article-id {})
+        current (jdbc/execute-one! conn
+                  (sql/format {:select [:title :subtitle :content :footnotes :addenda :preamble]
+                               :from [:articles]
+                               :where [:= :article_id article-id]
+                               :order-by [[:created_at :desc]]
+                               :limit 1})
+                  jdbc-opts)
         cur (current-version ds article-id)
         version (if publish? (inc cur) cur)
         article-changed? (or (not= title (:title current))
