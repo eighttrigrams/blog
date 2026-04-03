@@ -547,3 +547,23 @@
         ORDER BY created_at ASC"
        article-id max-version]
       jdbc-opts)))
+
+(defn get-comments-for-article [ds article-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT id, article_id, article_version, display_name, body, created_at
+        FROM comments
+        WHERE article_id = ?
+        ORDER BY created_at DESC"
+       article-id]
+      jdbc-opts)))
+
+(defn get-comments-for-version [ds article-id version]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT id, article_id, article_version, display_name, body, created_at
+        FROM comments
+        WHERE article_id = ? AND article_version = ?
+        ORDER BY created_at DESC"
+       article-id version]
+      jdbc-opts)))

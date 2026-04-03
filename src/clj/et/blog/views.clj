@@ -229,6 +229,31 @@
   (if (str/blank? text) 0
     (count (str/split (str/trim text) #"\s+"))))
 
+(defn- comment-entry [article_id versions logged-in? {:keys [id display_name body article_version created_at]}]
+  [:div {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
+   [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
+    [:a {:href (str "/articles/" article_id "/version/" article_version "/comment/" id)
+         :style "color: rgba(0,0,0,0.8); font-weight: 600;"} display_name]
+    " commented"
+    (when (> (count versions) 1)
+      (list " on " [:span.version-badge (str "v" article_version)] " of the article,"))
+    " on " (human-datetime created_at)
+    (when logged-in?
+      (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
+   [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]])
+
+(defn- comments-section [article_id version versions comments logged-in?]
+  (when (and version (pos? version))
+    [:div.article-section
+     [:h3 {:style "font-style: normal; margin-bottom: 1.5rem;"}
+      [:a {:href (str "/articles/" article_id "/version/" version "/comments")
+           :style "color: rgba(0,0,0,0.65); text-decoration: none;"}
+       "#"]
+      " Comments"]
+     (when (seq comments)
+       [:div (for [c comments] (comment-entry article_id versions logged-in? c))])
+     [:a.action-link {:href (str "/articles/" article_id "/version/" version "/comment")} "Leave a comment"]]))
+
 (defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda rendered-preamble comments]}]
   (let [{:keys [article_id title subtitle created_at version content]} article]
     (layout {:title title :logged-in? logged-in?}
@@ -249,25 +274,10 @@
          [:div.article-preamble (h/raw rendered-preamble)])
        [:div.article-content (h/raw rendered-content)]
        (when rendered-addenda
-         [:div.article-section
-          [:h3 "Addenda:"]
+         [:div {:style "margin-top: 8rem;"}
+          [:h3 {:style "font-size: 1rem; font-weight: 600; font-style: italic; color: rgba(0,0,0,0.65); margin-bottom: 0;"} "Addenda:"]
           [:div.article-content (h/raw rendered-addenda)]])]
-      (when (and version (pos? version))
-        [:div.comments-section {:style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.15); padding-top: 1.5rem;"}
-         (when (seq comments)
-           [:div
-            (for [{:keys [id display_name body article_version created_at]} comments]
-              [:div {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
-               [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
-                [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
-                " commented"
-                (when (> (count versions) 1)
-                  (list " on " [:span.version-badge (str "v" article_version)] " of the article,"))
-                " on " (human-datetime created_at)
-                (when logged-in?
-                  (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
-               [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]])])
-         [:a.action-link {:href (str "/articles/" article_id "/version/" version "/comment")} "Leave a comment"]]))))
+      (comments-section article_id version versions comments logged-in?))))
 
 (defn comment-form-page [{:keys [article logged-in? error]}]
   (let [{:keys [article_id version title]} article]
@@ -287,6 +297,44 @@
         [:label {:for "body"} "Comment"]
         [:textarea {:name "body" :id "body" :required true :style "min-height: 150px;"}]]
        [:button.btn {:type "submit"} "Submit"]])))
+
+(defn comment-page [{:keys [article comment rendered-body logged-in?]}]
+  (let [{:keys [article_id title version]} article
+        {:keys [id display_name created_at article_version]} comment]
+    (layout {:title (str "# " title) :logged-in? logged-in?}
+      [:article
+       [:h1 (str "# " title)]
+       [:p {:style "color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
+        [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
+        " commented on "
+        [:a {:href (str "/articles/" article_id "/version/" article_version)} (str "v" article_version)]
+        ", " (human-datetime created_at)
+        (when logged-in?
+          (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
+       [:div.article-content (h/raw rendered-body)]])))
+
+(defn comments-list-page [{:keys [article comments version logged-in?]}]
+  (let [{:keys [article_id title]} article]
+    (layout {:title (str "Comments on " title) :logged-in? logged-in?}
+      [:h1 (str "Comments on \"" title "\"")]
+      (when version
+        (list
+          [:p [:a {:href (str "/articles/" article_id "/comments")} "All comments"]]
+          [:p "Version " version]))
+      (if (seq comments)
+        [:ul {:style "list-style: none; padding: 0;"}
+         (for [{:keys [id display_name body article_version created_at]} comments]
+           [:li {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
+            [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
+             [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
+             " on "
+             [:a {:href (str "/articles/" article_id "/version/" article_version "/comment/" id)}
+              (str "v" article_version)]
+             ", " (human-datetime created_at)
+             (when logged-in?
+               (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
+            [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]])]
+        [:p "No comments yet."]))))
 
 (defn confirm-delete-comment-page [{:keys [comment logged-in?]}]
   (layout {:title "Delete Comment" :logged-in? logged-in?}

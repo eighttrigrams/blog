@@ -260,6 +260,44 @@
                   (mail/send-article-notification! subscribers title subtitle post-content (str base "/articles/" id)))))
             (redirect (str "/articles/" id))))))))
 
+(defn- comment-page-handler [req]
+  (let [auth? (logged-in? req)
+        article-id (Integer/parseInt (get-in req [:params :id]))
+        ver (Integer/parseInt (get-in req [:params :version]))
+        comment-id (Integer/parseInt (get-in req [:params :comment-id]))
+        article (db/get-article-by-version (ensure-ds) article-id ver {})
+        comment (db/get-comment (ensure-ds) comment-id)]
+    (if (and article comment (= (:article_id comment) article-id) (= (:article_version comment) ver))
+      (html-response 200
+        (views/comment-page {:article article :comment comment
+                             :rendered-body (render/markdown->html (:body comment))
+                             :logged-in? auth?}))
+      (html-response 404
+        (views/not-found-page {:logged-in? auth?})))))
+
+(defn- article-comments-handler [req]
+  (let [auth? (logged-in? req)
+        article-id (Integer/parseInt (get-in req [:params :id]))
+        article (db/get-article (ensure-ds) article-id {:published-only? (not auth?)})]
+    (if article
+      (let [comments (db/get-comments-for-article (ensure-ds) article-id)]
+        (html-response 200
+          (views/comments-list-page {:article article :comments comments :logged-in? auth?})))
+      (html-response 404
+        (views/not-found-page {:logged-in? auth?})))))
+
+(defn- version-comments-handler [req]
+  (let [auth? (logged-in? req)
+        article-id (Integer/parseInt (get-in req [:params :id]))
+        ver (Integer/parseInt (get-in req [:params :version]))
+        article (db/get-article-by-version (ensure-ds) article-id ver {})]
+    (if (and article (pos? ver))
+      (let [comments (db/get-comments-for-version (ensure-ds) article-id ver)]
+        (html-response 200
+          (views/comments-list-page {:article article :comments comments :version ver :logged-in? auth?})))
+      (html-response 404
+        (views/not-found-page {:logged-in? auth?})))))
+
 (defn- comment-form-handler [req]
   (let [id (Integer/parseInt (get-in req [:params :id]))
         ver (Integer/parseInt (get-in req [:params :version]))
@@ -572,9 +610,12 @@
   (GET "/articles/new" [] new-article-handler)
   (POST "/articles" [] create-article-handler)
   (GET ["/articles/:id/as-of/:as-of" :as-of #".*"] [] article-handler)
+  (GET "/articles/:id/version/:version/comment/:comment-id" [] comment-page-handler)
+  (GET "/articles/:id/version/:version/comments" [] version-comments-handler)
   (GET "/articles/:id/version/:version/comment" [] comment-form-handler)
   (POST "/articles/:id/version/:version/comment" [] comment-submit-handler)
   (GET "/articles/:id/version/:version" [] article-handler)
+  (GET "/articles/:id/comments" [] article-comments-handler)
   (GET "/articles/:id" [] article-handler)
   (GET "/articles/:id/edit" [] edit-article-handler)
   (GET "/articles/:id/delete" [] confirm-delete-article-handler)
