@@ -124,14 +124,19 @@
             rendered-addenda (render/markdown->html (:addenda article))
             rendered-preamble (render/markdown->html (:preamble article))
             comments (when (and (:version article) (pos? (:version article)))
-                       (db/get-comments-up-to-version (ensure-ds) id (:version article)))]
+                       (db/get-comments-up-to-version (ensure-ds) id (:version article)))
+            replies-by-comment (when (seq comments)
+                                 (group-by :comment_id
+                                   (db/get-replies-for-comments (ensure-ds) (map :id comments))))
+            comments-with-replies (when comments
+                                    (mapv #(assoc % :replies (get replies-by-comment (:id %))) comments))]
         (html-response 200
           (views/article-page {:article article :versions versions :logged-in? auth?
                                :current-version (:created_at article)
                                :rendered-content rendered-content
                                :rendered-addenda rendered-addenda
                                :rendered-preamble rendered-preamble
-                               :comments comments})))
+                               :comments comments-with-replies})))
       (html-response 404
         (views/not-found-page {:logged-in? auth?})))))
 
@@ -268,10 +273,12 @@
         article (db/get-article-by-version (ensure-ds) article-id ver {})
         comment (db/get-comment (ensure-ds) comment-id)]
     (if (and article comment (= (:article_id comment) article-id) (= (:article_version comment) ver))
-      (html-response 200
-        (views/comment-page {:article article :comment comment
-                             :rendered-body (render/markdown->html (:body comment))
-                             :logged-in? auth?}))
+      (let [replies (db/get-replies-for-comment (ensure-ds) comment-id)]
+        (html-response 200
+          (views/comment-page {:article article :comment comment
+                               :rendered-body (render/markdown->html (:body comment))
+                               :replies replies
+                               :logged-in? auth?})))
       (html-response 404
         (views/not-found-page {:logged-in? auth?})))))
 
@@ -280,7 +287,11 @@
         article-id (Integer/parseInt (get-in req [:params :id]))
         article (db/get-article (ensure-ds) article-id {:published-only? (not auth?)})]
     (if article
-      (let [comments (db/get-comments-for-article (ensure-ds) article-id)]
+      (let [comments (db/get-comments-for-article (ensure-ds) article-id)
+            replies-by-comment (when (seq comments)
+                                 (group-by :comment_id
+                                   (db/get-replies-for-comments (ensure-ds) (map :id comments))))
+            comments (mapv #(assoc % :replies (get replies-by-comment (:id %))) comments)]
         (html-response 200
           (views/comments-list-page {:article article :comments comments :logged-in? auth?})))
       (html-response 404
@@ -292,7 +303,11 @@
         ver (Integer/parseInt (get-in req [:params :version]))
         article (db/get-article-by-version (ensure-ds) article-id ver {})]
     (if (and article (pos? ver))
-      (let [comments (db/get-comments-for-version (ensure-ds) article-id ver)]
+      (let [comments (db/get-comments-for-version (ensure-ds) article-id ver)
+            replies-by-comment (when (seq comments)
+                                 (group-by :comment_id
+                                   (db/get-replies-for-comments (ensure-ds) (map :id comments))))
+            comments (mapv #(assoc % :replies (get replies-by-comment (:id %))) comments)]
         (html-response 200
           (views/comments-list-page {:article article :comments comments :version ver :logged-in? auth?})))
       (html-response 404
@@ -374,6 +389,92 @@
             (redirect (str "/articles/" (:article_id comment) "/version/" (:article_version comment))))
           (html-response 404
             (views/not-found-page {:logged-in? true})))))))
+
+(defn- confirm-delete-reply-handler [req]
+  (require-login req
+    (fn [req]
+      (let [id (Integer/parseInt (get-in req [:params :id]))
+            reply (db/get-reply (ensure-ds) id)]
+        (if reply
+          (let [comment (db/get-comment (ensure-ds) (:comment_id reply))]
+            (html-response 200
+              (views/confirm-delete-reply-page {:reply reply :comment comment :logged-in? true})))
+          (html-response 404
+            (views/not-found-page {:logged-in? true})))))))
+
+(defn- delete-reply-handler [req]
+  (require-login req
+    (fn [_]
+      (let [id (Integer/parseInt (get-in req [:params :id]))
+            reply (db/get-reply (ensure-ds) id)
+            reason (str/trim (or (get-in req [:form-params "reason"]) ""))]
+        (if reply
+          (let [comment (db/get-comment (ensure-ds) (:comment_id reply))]
+            (db/delete-reply! (ensure-ds) id)
+            (future
+              (try
+                (let [article (db/get-article-by-version (ensure-ds) (:article_id comment) (:article_version comment) {})
+                      article-title (or (:title article) (str "Article " (:article_id comment)))
+                      body (str "Your reply on \"" article-title "\" has been removed."
+                                (when (not= reason "")
+                                  (str "\n\nReason: " reason))
+                                "\n\nYour reply was:\n\n" (:body reply))]
+                  (mail/send-plain-email! (:email reply)
+                    (str "Reply removed: " article-title)
+                    body))
+                (catch Exception e
+                  (println "Failed to send reply deletion email:" (.getMessage e)))))
+            (redirect (str "/articles/" (:article_id comment) "/version/" (:article_version comment)
+                           "/comment/" (:comment_id reply))))
+          (html-response 404
+            (views/not-found-page {:logged-in? true})))))))
+
+(defn- reply-form-handler [req]
+  (let [comment-id (Integer/parseInt (get-in req [:params :id]))
+        comment (db/get-comment (ensure-ds) comment-id)]
+    (if comment
+      (let [article (db/get-article-by-version (ensure-ds) (:article_id comment) (:article_version comment) {})]
+        (if article
+          (html-response 200
+            (views/reply-form-page {:comment comment :article article :logged-in? (logged-in? req)}))
+          (html-response 404
+            (views/not-found-page {:logged-in? (logged-in? req)}))))
+      (html-response 404
+        (views/not-found-page {:logged-in? (logged-in? req)})))))
+
+(defn- reply-submit-handler [req]
+  (let [comment-id (Integer/parseInt (get-in req [:params :id]))
+        comment (db/get-comment (ensure-ds) comment-id)]
+    (if (nil? comment)
+      (html-response 404
+        (views/not-found-page {:logged-in? (logged-in? req)}))
+      (let [article (db/get-article-by-version (ensure-ds) (:article_id comment) (:article_version comment) {})]
+        (if (nil? article)
+          (html-response 404
+            (views/not-found-page {:logged-in? (logged-in? req)}))
+          (if-not (circuit-breaker/check-and-record!)
+            (html-response 503
+              (views/reply-form-page {:comment comment :article article :logged-in? (logged-in? req)
+                                      :error "This functionality is temporarily unavailable. Please try again later."}))
+            (let [email (str/trim (or (get-in req [:form-params "email"]) ""))
+                  display-name (str/trim (or (get-in req [:form-params "display-name"]) ""))
+                  body (str/trim (or (get-in req [:form-params "body"]) ""))]
+              (if (or (str/blank? email) (str/blank? display-name) (str/blank? body))
+                (html-response 400
+                  (views/reply-form-page {:comment comment :article article :logged-in? (logged-in? req)
+                                          :error "All fields are required."}))
+                (do
+                  (db/create-reply! (ensure-ds) comment-id email display-name body)
+                  (future
+                    (try
+                      (tracker/send-message!
+                        (str "Blog reply on \"" (:title article) "\" to " (:display_name comment))
+                        (str "From: " display-name " <" email ">\n\n" body)
+                        "eighttrigrams.net")
+                      (catch Exception e
+                        (println "Failed to forward reply to tracker:" (.getMessage e)))))
+                  (redirect (str "/articles/" (:article_id comment) "/version/" (:article_version comment)
+                                 "/comment/" comment-id)))))))))))
 
 (defn- confirm-delete-article-handler [req]
   (require-login req
@@ -603,6 +704,10 @@
   (GET "/login" [] login-page-handler)
   (POST "/login" [] login-handler)
   (GET "/logout" [] logout-handler)
+  (GET "/replies/:id/delete" [] confirm-delete-reply-handler)
+  (POST "/replies/:id/delete" [] delete-reply-handler)
+  (GET "/comments/:id/reply" [] reply-form-handler)
+  (POST "/comments/:id/reply" [] reply-submit-handler)
   (GET "/comments/:id/delete" [] confirm-delete-comment-handler)
   (POST "/comments/:id/delete" [] delete-comment-handler)
   (GET "/articles/deleted" [] deleted-articles-handler)

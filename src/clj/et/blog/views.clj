@@ -229,7 +229,16 @@
   (if (str/blank? text) 0
     (count (str/split (str/trim text) #"\s+"))))
 
-(defn- comment-entry [article_id versions logged-in? {:keys [id display_name body article_version created_at]}]
+(defn- reply-entry [logged-in? {:keys [id display_name body created_at]}]
+  [:div {:style "margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,0,0,0.05);"}
+   [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
+    [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
+    " replied on " (human-datetime created_at)
+    (when logged-in?
+      (list " " [:a.btn.btn-small.btn-danger {:href (str "/replies/" id "/delete")} "Delete"]))]
+   [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]])
+
+(defn- comment-entry [article_id versions logged-in? {:keys [id display_name body article_version created_at replies]}]
   [:div {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
    [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
     [:a {:href (str "/articles/" article_id "/version/" article_version "/comment/" id)
@@ -241,7 +250,10 @@
     " on " (human-datetime created_at)
     (when logged-in?
       (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
-   [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]])
+   [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]
+   (when (seq replies)
+     [:div {:style "margin-left: 2rem; margin-top: 1rem; border-left: 2px solid rgba(0,0,0,0.08); padding-left: 1rem;"}
+      (for [r replies] (reply-entry logged-in? r))])])
 
 (defn- comments-section [article_id version versions comments logged-in?]
   (when (and version (pos? version))
@@ -266,9 +278,22 @@
        (if (> (count versions) 1)
          (version-nav "/articles/" :article_id article (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
-       (if (and version (pos? version))
-         [:span.version-badge (str "v" version)]
-         (when logged-in? [:span.version-badge.draft "draft"]))
+       (let [pub-versions (->> versions (map :version) (filter pos?) distinct sort vec)]
+         (if (and version (pos? version) (> (count pub-versions) 1))
+           (let [idx (.indexOf pub-versions version)
+                 prev-ver (when (pos? idx) (nth pub-versions (dec idx)))
+                 next-ver (when (< idx (dec (count pub-versions))) (nth pub-versions (inc idx)))]
+             [:div.version-nav
+              (if prev-ver
+                [:a.version-arrow {:href (str "/articles/" article_id "/version/" prev-ver)} "\u2190"]
+                [:span.version-arrow.disabled "\u2190"])
+              [:span.version-badge (str "v" version)]
+              (if next-ver
+                [:a.version-arrow {:href (str "/articles/" article_id "/version/" next-ver)} "\u2192"]
+                [:span.version-arrow.disabled "\u2192"])])
+           (if (and version (pos? version))
+             [:span.version-badge (str "v" version)]
+             (when logged-in? [:span.version-badge.draft "draft"]))))
        (when logged-in?
          [:span " " [:a.btn.btn-small {:href (str "/articles/" article_id "/edit")} "Edit"]])
        (when rendered-preamble
@@ -299,7 +324,29 @@
         [:textarea {:name "body" :id "body" :required true :style "min-height: 150px;"}]]
        [:button.btn {:type "submit"} "Submit"]])))
 
-(defn comment-page [{:keys [article comment rendered-body logged-in?]}]
+(defn reply-form-page [{:keys [comment article logged-in? error]}]
+  (let [{:keys [id display_name body]} comment
+        {:keys [title]} article]
+    (layout {:title (str "Reply to " display_name) :logged-in? logged-in?}
+      [:h1 "Reply"]
+      [:p "To " [:strong display_name] "'s comment on: " [:strong title]]
+      [:blockquote {:style "border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6);"}
+       (h/raw (render/markdown->html body))]
+      (when error
+        [:p.error error])
+      [:form {:method "POST" :action (str "/comments/" id "/reply") :style "max-width: 500px;"}
+       [:div.form-group
+        [:label {:for "display-name"} "Display name"]
+        [:input {:type "text" :name "display-name" :id "display-name" :required true}]]
+       [:div.form-group
+        [:label {:for "email"} "Email (won't be displayed)"]
+        [:input {:type "email" :name "email" :id "email" :required true}]]
+       [:div.form-group
+        [:label {:for "body"} "Reply"]
+        [:textarea {:name "body" :id "body" :required true :style "min-height: 150px;"}]]
+       [:button.btn {:type "submit"} "Submit"]])))
+
+(defn comment-page [{:keys [article comment rendered-body replies logged-in?]}]
   (let [{:keys [article_id title version]} article
         {:keys [id display_name created_at article_version]} comment]
     (layout {:title (str "# " title) :logged-in? logged-in?}
@@ -312,7 +359,11 @@
         ", " (human-datetime created_at)
         (when logged-in?
           (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
-       [:div.article-content (h/raw rendered-body)]])))
+       [:div.article-content (h/raw rendered-body)]
+       (when (seq replies)
+         [:div {:style "margin-left: 2rem; margin-top: 1rem; border-left: 2px solid rgba(0,0,0,0.08); padding-left: 1rem;"}
+          (for [r replies] (reply-entry logged-in? r))])
+       [:p {:style "margin-top: 1.5rem;"} [:a.action-link {:href (str "/comments/" id "/reply")} "Reply"]]])))
 
 (defn comments-list-page [{:keys [article comments version logged-in?]}]
   (let [{:keys [article_id title]} article]
@@ -324,7 +375,7 @@
           [:p "Version " version]))
       (if (seq comments)
         [:ul {:style "list-style: none; padding: 0;"}
-         (for [{:keys [id display_name body article_version created_at]} comments]
+         (for [{:keys [id display_name body article_version created_at replies]} comments]
            [:li {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
             [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
              [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
@@ -334,7 +385,10 @@
              ", " (human-datetime created_at)
              (when logged-in?
                (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
-            [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]])]
+            [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]
+            (when (seq replies)
+              [:div {:style "margin-left: 2rem; margin-top: 1rem; border-left: 2px solid rgba(0,0,0,0.08); padding-left: 1rem;"}
+               (for [r replies] (reply-entry logged-in? r))])])]
         [:p "No comments yet."])
       (when version
         [:p [:a.action-link {:href (str "/articles/" article_id "/version/" version "/comment")}
@@ -353,6 +407,21 @@
       [:div.confirm-actions
        [:button.btn.btn-danger {:type "submit"} "Delete"]
        [:a.btn.btn-cancel {:href (str "/articles/" (:article_id comment) "/version/" (:article_version comment))} "Cancel"]]]]))
+
+(defn confirm-delete-reply-page [{:keys [reply comment logged-in?]}]
+  (layout {:title "Delete Reply" :logged-in? logged-in?}
+    [:h1 "Delete Reply"]
+    [:div.confirm-box
+     [:p "Are you sure you want to delete this reply by " [:strong (:display_name reply)] "?"]
+     [:div.article-content {:style "margin: 0.5rem 0;"} (h/raw (render/markdown->html (:body reply)))]
+     [:form {:method "POST" :action (str "/replies/" (:id reply) "/delete")}
+      [:div.form-group
+       [:label {:for "reason"} "Reason (optional)"]
+       [:textarea {:name "reason" :id "reason" :style "min-height: 80px;"}]]
+      [:div.confirm-actions
+       [:button.btn.btn-danger {:type "submit"} "Delete"]
+       [:a.btn.btn-cancel {:href (str "/articles/" (:article_id comment) "/version/" (:article_version comment)
+                                      "/comment/" (:id comment))} "Cancel"]]]]))
 
 (defn login-page [{:keys [error]}]
   (layout {:title "Login"}

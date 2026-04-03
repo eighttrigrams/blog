@@ -567,3 +567,43 @@
         ORDER BY created_at DESC"
        article-id version]
       jdbc-opts)))
+
+(defn create-reply! [ds comment-id email display-name body]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["INSERT INTO replies (comment_id, email, display_name, body) VALUES (?, ?, ?, ?)"
+       comment-id email display-name body])))
+
+(defn get-reply [ds reply-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["SELECT id, comment_id, email, display_name, body, created_at FROM replies WHERE id = ?" reply-id]
+      jdbc-opts)))
+
+(defn delete-reply! [ds reply-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["DELETE FROM replies WHERE id = ?" reply-id])))
+
+(defn get-replies-for-comment [ds comment-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT id, comment_id, display_name, body, created_at
+        FROM replies
+        WHERE comment_id = ?
+        ORDER BY created_at ASC"
+       comment-id]
+      jdbc-opts)))
+
+(defn get-replies-for-comments [ds comment-ids]
+  (if (empty? comment-ids)
+    []
+    (let [conn (get-conn ds)
+          placeholders (str/join "," (repeat (count comment-ids) "?"))]
+      (jdbc/execute! conn
+        (into [(str "SELECT id, comment_id, display_name, body, created_at
+                     FROM replies
+                     WHERE comment_id IN (" placeholders ")
+                     ORDER BY created_at ASC")]
+              comment-ids)
+        jdbc-opts))))
