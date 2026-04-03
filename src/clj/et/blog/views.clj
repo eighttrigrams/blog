@@ -165,12 +165,14 @@
              [:p.subtitle subtitle])])]
        [:p "No drafts."])]))
 
-(defn email-page [{:keys [logged-in? notice messages subscribers]}]
+(defn email-page [{:keys [logged-in? notice error messages subscribers]}]
   (layout {:title "Email updates" :logged-in? logged-in?}
     [:h1 "Email updates"]
     [:p "Get notified when new articles are published."]
     (when notice
       [:p {:style "font-weight: 600;"} notice])
+    (when error
+      [:p.error error])
     [:form {:method "POST" :action "/email" :style "max-width: 400px;"}
      [:div {:style "margin-bottom: 0.75rem; display: flex; gap: 1rem;"}
       [:label [:input {:type "radio" :name "action" :value "subscribe" :checked true}] " Subscribe"]
@@ -180,6 +182,8 @@
       [:button.btn {:type "submit"} "Submit"]]]
     [:div {:style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem;"}
      [:h2 "Leave a message"]
+     (when error
+       [:p.error error])
      [:form {:method "POST" :action "/email/message" :style "max-width: 400px;"}
       [:div {:style "margin-bottom: 0.5rem;"}
        [:input {:type "email" :name "email" :placeholder "you@example.com" :required true}]]

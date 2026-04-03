@@ -14,6 +14,7 @@
             [compojure.route :as route]
             [ring.middleware.params :refer [wrap-params]]
             [et.blog.middleware.rate-limit :refer [wrap-rate-limit]]
+            [et.blog.middleware.circuit-breaker :as circuit-breaker]
             [nrepl.server :as nrepl]
             [taoensso.telemere :as tel])
   (:gen-class))
@@ -415,36 +416,44 @@
   (html-response 200
     (views/email-page (email-page-data req {}))))
 
+(def ^:private unavailable-notice "This functionality is temporarily unavailable. Please try again later.")
+
 (defn- email-submit-handler [req]
-  (let [email (str/trim (or (get-in req [:form-params "email"]) ""))
-        action (get-in req [:form-params "action"])]
-    (if (str/blank? email)
-      (html-response 400
-        (views/email-page (email-page-data req {:notice "Please enter an email address."})))
-      (do
-        (if (= action "unsubscribe")
-          (db/unsubscribe-email! (ensure-ds) email)
-          (db/subscribe-email! (ensure-ds) email))
-        (html-response 200
-          (views/email-page (email-page-data req {:notice (if (= action "unsubscribe")
-                                                            "You have been unsubscribed."
-                                                            "Thanks for subscribing!")})))))))
+  (if-not (circuit-breaker/check-and-record!)
+    (html-response 503
+      (views/email-page (email-page-data req {:error unavailable-notice})))
+    (let [email (str/trim (or (get-in req [:form-params "email"]) ""))
+          action (get-in req [:form-params "action"])]
+      (if (str/blank? email)
+        (html-response 400
+          (views/email-page (email-page-data req {:notice "Please enter an email address."})))
+        (do
+          (if (= action "unsubscribe")
+            (db/unsubscribe-email! (ensure-ds) email)
+            (db/subscribe-email! (ensure-ds) email))
+          (html-response 200
+            (views/email-page (email-page-data req {:notice (if (= action "unsubscribe")
+                                                              "You have been unsubscribed."
+                                                              "Thanks for subscribing!")}))))))))
 
 (defn- message-submit-handler [req]
-  (let [email (str/trim (or (get-in req [:form-params "email"]) ""))
-        message (str/trim (or (get-in req [:form-params "message"]) ""))]
-    (if (or (str/blank? email) (str/blank? message))
-      (html-response 400
-        (views/email-page (email-page-data req {:notice "Please fill in all fields."})))
-      (do
-        (db/create-message! (ensure-ds) email message)
-        (future
-          (try
-            (tracker/send-message! (str "Blog message from \"" email "\"") message "eighttrigrams.net")
-            (catch Exception e
-              (println "Failed to forward to tracker:" (.getMessage e)))))
-        (html-response 200
-          (views/email-page (email-page-data req {:notice "Message sent!"})))))))
+  (if-not (circuit-breaker/check-and-record!)
+    (html-response 503
+      (views/email-page (email-page-data req {:error unavailable-notice})))
+    (let [email (str/trim (or (get-in req [:form-params "email"]) ""))
+          message (str/trim (or (get-in req [:form-params "message"]) ""))]
+      (if (or (str/blank? email) (str/blank? message))
+        (html-response 400
+          (views/email-page (email-page-data req {:notice "Please fill in all fields."})))
+        (do
+          (db/create-message! (ensure-ds) email message)
+          (future
+            (try
+              (tracker/send-message! (str "Blog message from \"" email "\"") message "eighttrigrams.net")
+              (catch Exception e
+                (println "Failed to forward to tracker:" (.getMessage e)))))
+          (html-response 200
+            (views/email-page (email-page-data req {:notice "Message sent!"}))))))))
 
 (defn- feed-posts-handler [req]
   (let [posts (db/list-posts (ensure-ds))]
