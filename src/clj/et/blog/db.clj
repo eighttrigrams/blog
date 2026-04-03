@@ -88,19 +88,28 @@
 
 (defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda preamble preview-image abstract publish? post-content]}]
   (let [conn (get-conn ds)
+        current (get-article ds article-id {})
         cur (current-version ds article-id)
-        version (if publish? (inc cur) cur)]
-    (jdbc/execute-one! conn
-      (sql/format {:insert-into :articles
-                   :values [{:article_id article-id
-                             :title title
-                             :subtitle (or subtitle "")
-                             :content content
-                             :footnotes (or footnotes "")
-                             :addenda (or addenda "")
-                             :preamble (or preamble "")
-                             :version version}]})
-      jdbc-opts)
+        version (if publish? (inc cur) cur)
+        article-changed? (or (not= title (:title current))
+                             (not= (or subtitle "") (or (:subtitle current) ""))
+                             (not= content (:content current))
+                             (not= (or footnotes "") (or (:footnotes current) ""))
+                             (not= (or addenda "") (or (:addenda current) ""))
+                             (not= (or preamble "") (or (:preamble current) "")))
+        need-new-row? (or publish? article-changed?)]
+    (when need-new-row?
+      (jdbc/execute-one! conn
+        (sql/format {:insert-into :articles
+                     :values [{:article_id article-id
+                               :title title
+                               :subtitle (or subtitle "")
+                               :content content
+                               :footnotes (or footnotes "")
+                               :addenda (or addenda "")
+                               :preamble (or preamble "")
+                               :version version}]})
+        jdbc-opts))
     (let [meta-updates (cond-> {}
                         preview-image (assoc :preview_image preview-image)
                         abstract (assoc :abstract abstract))]
