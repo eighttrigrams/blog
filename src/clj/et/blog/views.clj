@@ -334,7 +334,10 @@
              (when logged-in?
                (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
             [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]])]
-        [:p "No comments yet."]))))
+        [:p "No comments yet."])
+      (when version
+        [:p [:a.action-link {:href (str "/articles/" article_id "/version/" version "/comment")}
+             "Leave a comment"]]))))
 
 (defn confirm-delete-comment-page [{:keys [comment logged-in?]}]
   (layout {:title "Delete Comment" :logged-in? logged-in?}
