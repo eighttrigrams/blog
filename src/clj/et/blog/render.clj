@@ -91,6 +91,17 @@
     (str/replace html #"(src=\")(blog-images/)" (fn [[_ pre path]] (str pre base "/" path)))
     html))
 
+(def ^:private youtube-url-pattern
+  #"(?:<a [^>]*href=\")?https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)[^\"<\s]*(?:\"[^>]*>[^<]*</a>)?")
+
+(defn- embed-youtube [html]
+  (str/replace html youtube-url-pattern
+    (fn [[_ video-id]]
+      (str "<div style=\"position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:1rem 0;\">"
+           "<iframe src=\"https://www.youtube.com/embed/" video-id
+           "\" style=\"position:absolute;top:0;left:0;width:100%;height:100%;border:0;\""
+           " allowfullscreen></iframe></div>"))))
+
 (defn render-content [{:keys [content footnotes]} fetch-fn]
   (let [content (or content "")
         ref-ids (find-footnote-refs content)
@@ -100,6 +111,7 @@
         html (or (markdown->html processed) "")
         html (replace-footnote-refs html ref-order def-map)
         html (resolve-image-paths html)
+        html (embed-youtube html)
         footnotes-html (render-footnotes-html ref-ids def-map)]
     (str html (or footnotes-html ""))))
 

@@ -233,7 +233,8 @@
   [:div {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
    [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
     [:a {:href (str "/articles/" article_id "/version/" article_version "/comment/" id)
-         :style "color: rgba(0,0,0,0.8); font-weight: 600;"} display_name]
+         :style "color: rgba(0,0,0,0.5); text-decoration: none;"} "#"]
+    " " [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
     " commented"
     (when (> (count versions) 1)
       (list " on " [:span.version-badge (str "v" article_version)] " of the article,"))
