@@ -45,6 +45,11 @@
         .article-list li:last-child { border-bottom: none; }
         .article-list a { color: rgba(0,0,0,0.8); }
         .article-list a:hover h2 { color: #FD5353; }
+        .article-list-link, .article-list-link:visited { color: rgba(0,0,0,0.8); text-decoration: none; }
+        .article-list-link:hover { color: #FD5353; text-decoration: underline; }
+        .topic-link { color: rgba(0,0,0,0.5); text-decoration: none; }
+        .topic-link:hover { color: #FD5353; text-decoration: underline; }
+        .topic-link:visited { color: rgba(0,0,0,0.5); }
         .article-date { color: rgba(0,0,0,0.4); font-size: 0.9rem; }
         .article-preview { max-width: 300px; height: auto; margin-top: 0.5rem; display: block; }
         .article-version-info { color: rgba(0,0,0,0.4); font-size: 0.85rem; margin: 0 0 0.3rem 0; }
@@ -130,12 +135,12 @@
 
 (defn home-page [{:keys [articles logged-in? topic]}]
   (layout {:title nil :logged-in? logged-in?}
-    [:h1 "Articles"]
+    [:h1 [:a {:href "/" :class "article-list-link"} "Articles"]]
     [:div {:style "margin-bottom: 1.5rem; display: flex; gap: 1rem;"}
      (for [[label val] [["SWE" "swe"] ["Modelling" "modelling"] ["Thoughts" "thoughts"]]]
        (if (= topic val)
          [:strong {:style "color: rgba(0,0,0,0.8);"} label]
-         [:a {:href (str "/articles?topic=" val) :style "color: rgba(0,0,0,0.5); text-decoration: none;"} label]))
+         [:a.topic-link {:href (str "/articles?topic=" val)} label]))
 ]
     (if (seq articles)
       [:ul.article-list
