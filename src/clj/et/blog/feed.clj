@@ -32,7 +32,7 @@
             (let [post-id (:post_id post)
                   created (or (:first_at post) (:created_at post))
                   link (get article-links post-id)
-                  post-url (str site-url "/posts/" post-id)
+                  post-url (str site-url "/post/" post-id)
                   content-html (nth rendered-posts idx "")]
               (str
                 "  <entry>\n"
@@ -48,7 +48,7 @@
                                     base))
                                 (human-date created)) "</title>\n"
                 "    <link href=\"" (xml-escape post-url) "\"/>\n"
-                "    <id>" (xml-escape (str site-url "/posts/" post-id)) "</id>\n"
+                "    <id>" (xml-escape (str site-url "/post/" post-id)) "</id>\n"
                 "    <updated>" (iso-date created) "</updated>\n"
                 "    <content type=\"html\">" (xml-escape content-html) "</content>\n"
                 "  </entry>\n")))
@@ -69,7 +69,7 @@
       (str/join
         (for [article articles]
           (let [{:keys [article_id title subtitle version created_at]} article
-                article-url (str site-url "/articles/" article_id "/version/" version)
+                article-url (str site-url "/article/" article_id "/version/" version)
                 post-body (get post-contents [article_id version] "")]
             (str
               "  <entry>\n"
@@ -81,7 +81,7 @@
                                 (str base " (v" version ")")
                                 base)) "</title>\n"
               "    <link href=\"" (xml-escape article-url) "\"/>\n"
-              "    <id>" (xml-escape (str site-url "/articles/" article_id "/v" version)) "</id>\n"
+              "    <id>" (xml-escape (str site-url "/article/" article_id "/v" version)) "</id>\n"
               "    <updated>" (iso-date created_at) "</updated>\n"
               "    <content type=\"html\">" (xml-escape post-body) "</content>\n"
               "  </entry>\n"))))

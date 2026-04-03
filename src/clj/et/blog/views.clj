@@ -114,7 +114,7 @@
         [:a {:href "/posts"} "Posts"]
         [:a {:href "/"} "Articles"]
         (when logged-in?
-          [:a {:href "/articles/drafts"} "Drafts"])]
+          [:a {:href "/article/drafts"} "Drafts"])]
        [:div.nav-right
         [:a.feed-icon {:href "/feed/articles.xml" :title "Articles feed"}
          (h/raw "<svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><circle cx=\"68\" cy=\"189\" r=\"28\" fill=\"currentColor\"/><path d=\"M160 213h-34a89 89 0 0 0-89-89V90a123 123 0 0 1 123 123z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/><path d=\"M220 213h-34a149 149 0 0 0-149-149V30a183 183 0 0 1 183 183z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"32\"/></svg>")]
@@ -135,7 +135,7 @@
       [:ul.article-list
        (for [{:keys [article_id title subtitle preview_image abstract latest-version latest-published-at]} articles]
          [:li
-          [:a {:href (str "/articles/" article_id)}
+          [:a {:href (str "/article/" article_id)}
            [:h2 title]]
           (when (and subtitle (not= subtitle ""))
             [:p.subtitle subtitle])
@@ -158,12 +158,12 @@
 (defn drafts-page [{:keys [articles logged-in?]}]
   (layout {:title "Drafts" :logged-in? logged-in?}
     [:div
-     [:p [:a.action-link {:href "/articles/new"} "New Article"]]
+     [:p [:a.action-link {:href "/article/new"} "New Article"]]
      (if (seq articles)
        [:ul.article-list
         (for [{:keys [article_id title subtitle]} articles]
           [:li
-           [:a {:href (str "/articles/" article_id)}
+           [:a {:href (str "/article/" article_id)}
             [:h2 title]]
            (when (and subtitle (not= subtitle ""))
              [:p.subtitle subtitle])])]
@@ -241,7 +241,7 @@
 (defn- comment-entry [article_id versions logged-in? {:keys [id display_name body article_version created_at replies]}]
   [:div {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
    [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
-    [:a {:href (str "/articles/" article_id "/version/" article_version "/comment/" id)
+    [:a {:href (str "/article/" article_id "/version/" article_version "/comment/" id)
          :style "color: rgba(0,0,0,0.5); text-decoration: none;"} "#"]
     " " [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
     " commented"
@@ -259,13 +259,13 @@
   (when (and version (pos? version))
     [:div.article-section
      [:h3 {:style "font-style: normal; margin-bottom: 1.5rem;"}
-      [:a {:href (str "/articles/" article_id "/version/" version "/comments")
+      [:a {:href (str "/article/" article_id "/version/" version "/comments")
            :style "color: rgba(0,0,0,0.65); text-decoration: none;"}
        "#"]
       " Comments"]
      (when (seq comments)
        [:div (for [c comments] (comment-entry article_id versions logged-in? c))])
-     [:a.action-link {:href (str "/articles/" article_id "/version/" version "/comment")} "Leave a comment"]]))
+     [:a.action-link {:href (str "/article/" article_id "/version/" version "/comment")} "Leave a comment"]]))
 
 (defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda rendered-preamble comments]}]
   (let [{:keys [article_id title subtitle created_at version content]} article]
@@ -276,7 +276,7 @@
          [:p.subtitle subtitle])
        [:p.word-count (str (word-count content) " words")]
        (if (> (count versions) 1)
-         (version-nav "/articles/" :article_id article (or current-version created_at) versions)
+         (version-nav "/article/" :article_id article (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
        (let [pub-versions (->> versions (map :version) (filter pos?) distinct sort vec)]
          (if (and version (pos? version) (> (count pub-versions) 1))
@@ -285,17 +285,17 @@
                  next-ver (when (< idx (dec (count pub-versions))) (nth pub-versions (inc idx)))]
              [:div.version-nav
               (if prev-ver
-                [:a.version-arrow {:href (str "/articles/" article_id "/version/" prev-ver)} "\u2190"]
+                [:a.version-arrow {:href (str "/article/" article_id "/version/" prev-ver)} "\u2190"]
                 [:span.version-arrow.disabled "\u2190"])
               [:span.version-badge (str "v" version)]
               (if next-ver
-                [:a.version-arrow {:href (str "/articles/" article_id "/version/" next-ver)} "\u2192"]
+                [:a.version-arrow {:href (str "/article/" article_id "/version/" next-ver)} "\u2192"]
                 [:span.version-arrow.disabled "\u2192"])])
            (if (and version (pos? version))
              [:span.version-badge (str "v" version)]
              (when logged-in? [:span.version-badge.draft "draft"]))))
        (when logged-in?
-         [:span " " [:a.btn.btn-small {:href (str "/articles/" article_id "/edit")} "Edit"]])
+         [:span " " [:a.btn.btn-small {:href (str "/article/" article_id "/edit")} "Edit"]])
        (when rendered-preamble
          [:div.article-preamble (h/raw rendered-preamble)])
        [:div.article-content (h/raw rendered-content)]
@@ -312,7 +312,7 @@
       [:p "On: " [:strong title] " (v" version ")"]
       (when error
         [:p.error error])
-      [:form {:method "POST" :action (str "/articles/" article_id "/version/" version "/comment") :style "max-width: 500px;"}
+      [:form {:method "POST" :action (str "/article/" article_id "/version/" version "/comment") :style "max-width: 500px;"}
        [:div.form-group
         [:label {:for "display-name"} "Display name"]
         [:input {:type "text" :name "display-name" :id "display-name" :required true}]]
@@ -355,7 +355,7 @@
        [:p {:style "color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
         [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
         " commented on "
-        [:a {:href (str "/articles/" article_id "/version/" article_version)} (str "v" article_version)]
+        [:a {:href (str "/article/" article_id "/version/" article_version)} (str "v" article_version)]
         ", " (human-datetime created_at)
         (when logged-in?
           (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
@@ -371,7 +371,7 @@
       [:h1 (str "Comments on \"" title "\"")]
       (when version
         (list
-          [:p [:a {:href (str "/articles/" article_id "/comments")} "All comments"]]
+          [:p [:a {:href (str "/article/" article_id "/comments")} "All comments"]]
           [:p "Version " version]))
       (if (seq comments)
         [:ul {:style "list-style: none; padding: 0;"}
@@ -380,7 +380,7 @@
             [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
              [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
              " on "
-             [:a {:href (str "/articles/" article_id "/version/" article_version "/comment/" id)}
+             [:a {:href (str "/article/" article_id "/version/" article_version "/comment/" id)}
               (str "v" article_version)]
              ", " (human-datetime created_at)
              (when logged-in?
@@ -391,7 +391,7 @@
                (for [r replies] (reply-entry logged-in? r))])])]
         [:p "No comments yet."])
       (when version
-        [:p [:a.action-link {:href (str "/articles/" article_id "/version/" version "/comment")}
+        [:p [:a.action-link {:href (str "/article/" article_id "/version/" version "/comment")}
              "Leave a comment"]]))))
 
 (defn confirm-delete-comment-page [{:keys [comment logged-in?]}]
@@ -406,7 +406,7 @@
        [:textarea {:name "reason" :id "reason" :style "min-height: 80px;"}]]
       [:div.confirm-actions
        [:button.btn.btn-danger {:type "submit"} "Delete"]
-       [:a.btn.btn-cancel {:href (str "/articles/" (:article_id comment) "/version/" (:article_version comment))} "Cancel"]]]]))
+       [:a.btn.btn-cancel {:href (str "/article/" (:article_id comment) "/version/" (:article_version comment))} "Cancel"]]]]))
 
 (defn confirm-delete-reply-page [{:keys [reply comment logged-in?]}]
   (layout {:title "Delete Reply" :logged-in? logged-in?}
@@ -420,7 +420,7 @@
        [:textarea {:name "reason" :id "reason" :style "min-height: 80px;"}]]
       [:div.confirm-actions
        [:button.btn.btn-danger {:type "submit"} "Delete"]
-       [:a.btn.btn-cancel {:href (str "/articles/" (:article_id comment) "/version/" (:article_version comment)
+       [:a.btn.btn-cancel {:href (str "/article/" (:article_id comment) "/version/" (:article_version comment)
                                       "/comment/" (:id comment))} "Cancel"]]]]))
 
 (defn login-page [{:keys [error]}]
@@ -435,7 +435,7 @@
      [:button.btn {:type "submit"} "Login"]]))
 
 (defn edit-page [{:keys [article logged-in? new? error post-content]}]
-  (let [action (if new? "/articles" (str "/articles/" (:article_id article)))]
+  (let [action (if new? "/articles" (str "/article/" (:article_id article)))]
     (layout {:title (if new? "New Article" "Edit Article") :logged-in? logged-in?}
       (when error
         [:p.error error])
@@ -446,7 +446,7 @@
          [:button.btn {:type "submit"} "Save"]
          [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"} "Publish"]
          (when-not new?
-           [:a.btn.btn-small.btn-danger {:href (str "/articles/" (:article_id article) "/delete")} "Delete"])]]
+           [:a.btn.btn-small.btn-danger {:href (str "/article/" (:article_id article) "/delete")} "Delete"])]]
        [:div.form-group
         [:label {:for "title"} "Title"]
         [:input {:type "text" :name "title" :id "title" :value (or (:title article) "") :required true}]]
@@ -480,23 +480,23 @@
   (layout {:title "Posts" :logged-in? logged-in?}
     [:h1 "Posts"]
     (when logged-in?
-      [:p [:a.action-link {:href "/posts/new"} "New Post"]])
+      [:p [:a.action-link {:href "/post/new"} "New Post"]])
     (if (seq posts)
       [:ul.post-list
        (for [{:keys [post_id created_at first_at rendered-content article-link resolved-image]} posts]
          [:li
           [:div.post-heading
-           [:h2 [:a.post-permalink {:href (str "/posts/" post_id)} "#"] " " (human-date (or first_at created_at))]
+           [:h2 [:a.post-permalink {:href (str "/post/" post_id)} "#"] " " (human-date (or first_at created_at))]
            (when logged-in?
-             [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"])]
+             [:a.btn.btn-small {:href (str "/post/" post_id "/edit")} "Edit"])]
           [:div.article-content (h/raw rendered-content)]
           (when article-link
             (list
               (when resolved-image
-                [:a {:href (str "/articles/" (:article_id article-link))}
+                [:a {:href (str "/article/" (:article_id article-link))}
                  [:img.article-preview {:src resolved-image :alt (:title article-link)}]])
               [:p.post-article-link
-               [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
+               [:a {:href (str "/article/" (:article_id article-link) "/version/" (:article_version article-link))}
                 (:title article-link)
                 " \u2192"]]
               (when-let [sub (not-empty (:subtitle article-link))]
@@ -508,25 +508,25 @@
     (layout {:title "Post" :logged-in? logged-in?}
       [:article
        (if (and logged-in? (> (count versions) 1))
-         (version-nav "/posts/" :post_id post (or current-version created_at) versions)
+         (version-nav "/post/" :post_id post (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
        (when logged-in?
-         [:span [:a.btn.btn-small {:href (str "/posts/" post_id "/edit")} "Edit"]])
+         [:span [:a.btn.btn-small {:href (str "/post/" post_id "/edit")} "Edit"]])
        [:div.article-content (h/raw rendered-content)]
        (when article-link
          (list
            (when resolved-image
-             [:a {:href (str "/articles/" (:article_id article-link))}
+             [:a {:href (str "/article/" (:article_id article-link))}
               [:img.article-preview {:src resolved-image :alt (:title article-link)}]])
            [:p.post-article-link
-            [:a {:href (str "/articles/" (:article_id article-link) "/version/" (:article_version article-link))}
+            [:a {:href (str "/article/" (:article_id article-link) "/version/" (:article_version article-link))}
              (:title article-link)
              " \u2192"]]
            (when-let [sub (not-empty (:subtitle article-link))]
              [:p.subtitle sub])))])))
 
 (defn edit-post-page [{:keys [post logged-in? new?]}]
-  (let [action (if new? "/posts" (str "/posts/" (:post_id post)))]
+  (let [action (if new? "/posts" (str "/post/" (:post_id post)))]
     (layout {:title (if new? "New Post" "Edit Post") :logged-in? logged-in?}
       [:form {:method "POST" :action action}
        [:div.edit-heading
@@ -534,7 +534,7 @@
         [:div.edit-actions
          [:button.btn {:type "submit"} "Save"]
          (when-not new?
-           [:a.btn.btn-small.btn-danger {:href (str "/posts/" (:post_id post) "/delete")} "Delete"])]]
+           [:a.btn.btn-small.btn-danger {:href (str "/post/" (:post_id post) "/delete")} "Delete"])]]
        [:div.form-group
         [:label {:for "image"} "Image"]
         [:input {:type "text" :name "image" :id "image" :value (or (:image post) "")}]]
@@ -549,9 +549,9 @@
     [:div.confirm-box
      [:p "Are you sure you want to delete \"" (hu/escape-html (:title article)) "\"?"]
      [:div.confirm-actions
-      [:form {:method "POST" :action (str "/articles/" (:article_id article) "/delete")}
+      [:form {:method "POST" :action (str "/article/" (:article_id article) "/delete")}
        [:button.btn.btn-danger {:type "submit"} "Delete"]]
-      [:a.btn.btn-cancel {:href (str "/articles/" (:article_id article) "/edit")} "Cancel"]]]))
+      [:a.btn.btn-cancel {:href (str "/article/" (:article_id article) "/edit")} "Cancel"]]]))
 
 (defn confirm-delete-post-page [{:keys [post logged-in?]}]
   (layout {:title "Delete Post" :logged-in? logged-in?}
@@ -559,9 +559,9 @@
     [:div.confirm-box
      [:p "Are you sure you want to delete the post from " (human-date (:created_at post)) "?"]
      [:div.confirm-actions
-      [:form {:method "POST" :action (str "/posts/" (:post_id post) "/delete")}
+      [:form {:method "POST" :action (str "/post/" (:post_id post) "/delete")}
        [:button.btn.btn-danger {:type "submit"} "Delete"]]
-      [:a.btn.btn-cancel {:href (str "/posts/" (:post_id post) "/edit")} "Cancel"]]]))
+      [:a.btn.btn-cancel {:href (str "/post/" (:post_id post) "/edit")} "Cancel"]]]))
 
 (defn deleted-articles-page [{:keys [articles logged-in?]}]
   (layout {:title "Deleted Articles" :logged-in? logged-in?}

@@ -21,13 +21,13 @@
                (t/article-params {"title" "Draft Article" "content" "Draft body"})
                token)]
     (is (= 302 (:status resp)))
-    (is (str/starts-with? (t/redirect-location resp) "/articles/"))
+    (is (str/starts-with? (t/redirect-location resp) "/article/"))
     (testing "draft does NOT appear on public home page"
       (let [home (t/GET app "/")]
         (is (str/includes? (:body home) "No articles yet."))
         (is (not (str/includes? (:body home) "Draft Article")))))
     (testing "draft appears on authenticated drafts page"
-      (let [drafts (t/GET app "/articles/drafts" token)
+      (let [drafts (t/GET app "/article/drafts" token)
             html (t/parse drafts)
             h2s (t/select-all html (hs/tag :h2))]
         (is (= 200 (:status drafts)))
@@ -41,7 +41,7 @@
                                   "subtitle" "A subtitle"
                                   "publish" "1" "post-content" "Post announcement text"})
                token)
-        article-id (str/replace (t/redirect-location resp) "/articles/" "")]
+        article-id (str/replace (t/redirect-location resp) "/article/" "")]
     (is (= 302 (:status resp)))
     (testing "published article appears on public home page"
       (let [home (t/GET app "/")
@@ -52,7 +52,7 @@
         (is (str/includes? (:body home) "A subtitle"))
         (is (= 1 (count lis)) "exactly one article in the list")))
     (testing "article page renders title, content, and version badge"
-      (let [resp (t/GET app (str "/articles/" article-id))
+      (let [resp (t/GET app (str "/article/" article-id))
             html (t/parse resp)]
         (is (= 200 (:status resp)))
         (is (= "Published Article" (t/text-of (t/select-one html (hs/tag :h1)))))
@@ -69,12 +69,12 @@
         create-resp (t/POST app "/articles"
                       (t/article-params {"title" "Original Title" "content" "Original content"})
                       token)
-        article-id (str/replace (t/redirect-location create-resp) "/articles/" "")]
+        article-id (str/replace (t/redirect-location create-resp) "/article/" "")]
     (Thread/sleep 1100)
-    (t/POST app (str "/articles/" article-id)
+    (t/POST app (str "/article/" article-id)
       (t/article-params {"title" "Updated Title" "content" "Updated content"})
       token)
-    (let [resp (t/GET app (str "/articles/" article-id) token)
+    (let [resp (t/GET app (str "/article/" article-id) token)
           html (t/parse resp)]
       (is (= 200 (:status resp)))
       (is (= "Updated Title" (t/text-of (t/select-one html (hs/tag :h1)))))
@@ -89,14 +89,14 @@
                       (t/article-params {"title" "To Delete" "content" "Will be gone"
                                          "publish" "1" "post-content" "Bye"})
                       token)
-        article-id (str/replace (t/redirect-location create-resp) "/articles/" "")]
+        article-id (str/replace (t/redirect-location create-resp) "/article/" "")]
     (testing "article exists before deletion"
-      (is (= 200 (:status (t/GET app (str "/articles/" article-id))))))
-    (t/POST app (str "/articles/" article-id "/delete") {} token)
+      (is (= 200 (:status (t/GET app (str "/article/" article-id))))))
+    (t/POST app (str "/article/" article-id "/delete") {} token)
     (testing "article returns 404 after soft-delete"
-      (is (= 404 (:status (t/GET app (str "/articles/" article-id))))))
+      (is (= 404 (:status (t/GET app (str "/article/" article-id))))))
     (testing "article appears in deleted list"
-      (let [resp (t/GET app "/articles/deleted" token)]
+      (let [resp (t/GET app "/article/deleted" token)]
         (is (str/includes? (:body resp) "To Delete"))))
     (testing "home page is empty again"
       (is (str/includes? (:body (t/GET app "/")) "No articles yet.")))))
@@ -109,20 +109,20 @@
       token)
     (testing "first publish creates version 1"
       (Thread/sleep 1100)
-      (t/POST app "/articles/1"
+      (t/POST app "/article/1"
         (t/article-params {"title" "Versioned" "content" "v1 content"
                            "publish" "1" "post-content" "Announcement"})
         token)
-      (let [resp (t/GET app "/articles/1/version/1")]
+      (let [resp (t/GET app "/article/1/version/1")]
         (is (= 200 (:status resp)))
         (is (str/includes? (:body resp) "v1 content"))))
     (testing "second publish creates version 2"
       (Thread/sleep 1100)
-      (t/POST app "/articles/1"
+      (t/POST app "/article/1"
         (t/article-params {"title" "Versioned" "content" "v2 content"
                            "publish" "1" "post-content" "Update"})
         token)
-      (let [resp (t/GET app "/articles/1/version/2")]
+      (let [resp (t/GET app "/article/1/version/2")]
         (is (= 200 (:status resp)))
         (is (str/includes? (:body resp) "v2 content"))
         (is (not (str/includes? (:body resp) "v1 content")))))))
@@ -147,6 +147,6 @@
 
 (deftest nonexistent-article-returns-404
   (let [app (t/make-app)
-        resp (t/GET app "/articles/999")]
+        resp (t/GET app "/article/999")]
     (is (= 404 (:status resp)))
     (is (str/includes? (:body resp) "Not Found"))))

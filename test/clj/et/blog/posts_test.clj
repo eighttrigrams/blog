@@ -27,9 +27,9 @@
   (let [app (t/make-app)
         token (t/login app)
         resp (t/POST app "/posts" {"content" "Ephemeral post" "footnotes" "" "image" ""} token)
-        post-id (str/replace (t/redirect-location resp) "/posts/" "")]
-    (is (= 200 (:status (t/GET app (str "/posts/" post-id)))))
-    (t/POST app (str "/posts/" post-id "/delete") {} token)
-    (is (= 404 (:status (t/GET app (str "/posts/" post-id)))))
-    (let [resp (t/GET app "/posts/deleted" token)]
+        post-id (str/replace (t/redirect-location resp) "/post/" "")]
+    (is (= 200 (:status (t/GET app (str "/post/" post-id)))))
+    (t/POST app (str "/post/" post-id "/delete") {} token)
+    (is (= 404 (:status (t/GET app (str "/post/" post-id)))))
+    (let [resp (t/GET app "/post/deleted" token)]
       (is (str/includes? (:body resp) "Ephemeral post")))))

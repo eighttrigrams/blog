@@ -17,7 +17,7 @@
 
 (deftest unauthenticated-access-redirects-to-login
   (let [app (t/make-app)]
-    (doseq [path ["/articles/drafts" "/articles/new"]]
+    (doseq [path ["/article/drafts" "/article/new"]]
       (let [resp (t/GET app path)]
         (is (= 302 (:status resp)))
         (is (= "/login" (t/redirect-location resp))

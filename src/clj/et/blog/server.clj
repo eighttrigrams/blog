@@ -214,8 +214,8 @@
               (future
                 (let [subscribers (db/list-email-subscribers (ensure-ds))
                       base (site-url req)]
-                  (mail/send-article-notification! subscribers title subtitle post-content (str base "/articles/" article-id)))))
-            (redirect (str "/articles/" article-id))))))))
+                  (mail/send-article-notification! subscribers title subtitle post-content (str base "/article/" article-id)))))
+            (redirect (str "/article/" article-id))))))))
 
 (defn- edit-article-handler [req]
   (require-login req
@@ -262,8 +262,8 @@
               (future
                 (let [subscribers (db/list-email-subscribers (ensure-ds))
                       base (site-url req)]
-                  (mail/send-article-notification! subscribers title subtitle post-content (str base "/articles/" id)))))
-            (redirect (str "/articles/" id))))))))
+                  (mail/send-article-notification! subscribers title subtitle post-content (str base "/article/" id)))))
+            (redirect (str "/article/" id))))))))
 
 (defn- comment-page-handler [req]
   (let [auth? (logged-in? req)
@@ -351,7 +351,7 @@
                     "eighttrigrams.net")
                   (catch Exception e
                     (println "Failed to forward comment to tracker:" (.getMessage e)))))
-              (redirect (str "/articles/" id "/version/" ver)))))))))
+              (redirect (str "/article/" id "/version/" ver)))))))))
 
 (defn- confirm-delete-comment-handler [req]
   (require-login req
@@ -386,7 +386,7 @@
                     body))
                 (catch Exception e
                   (println "Failed to send comment deletion email:" (.getMessage e)))))
-            (redirect (str "/articles/" (:article_id comment) "/version/" (:article_version comment))))
+            (redirect (str "/article/" (:article_id comment) "/version/" (:article_version comment))))
           (html-response 404
             (views/not-found-page {:logged-in? true})))))))
 
@@ -424,7 +424,7 @@
                     body))
                 (catch Exception e
                   (println "Failed to send reply deletion email:" (.getMessage e)))))
-            (redirect (str "/articles/" (:article_id comment) "/version/" (:article_version comment)
+            (redirect (str "/article/" (:article_id comment) "/version/" (:article_version comment)
                            "/comment/" (:comment_id reply))))
           (html-response 404
             (views/not-found-page {:logged-in? true})))))))
@@ -473,7 +473,7 @@
                         "eighttrigrams.net")
                       (catch Exception e
                         (println "Failed to forward reply to tracker:" (.getMessage e)))))
-                  (redirect (str "/articles/" (:article_id comment) "/version/" (:article_version comment)
+                  (redirect (str "/article/" (:article_id comment) "/version/" (:article_version comment)
                                  "/comment/" comment-id)))))))))))
 
 (defn- confirm-delete-article-handler [req]
@@ -554,7 +554,7 @@
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             image (or (get-in req [:form-params "image"]) "")
             post-id (db/create-post! (ensure-ds) {:content content :footnotes footnotes :image image})]
-        (redirect (str "/posts/" post-id))))))
+        (redirect (str "/post/" post-id))))))
 
 (defn- edit-post-handler [req]
   (require-login req
@@ -575,7 +575,7 @@
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             image (or (get-in req [:form-params "image"]) "")]
         (db/update-post! (ensure-ds) id {:content content :footnotes footnotes :image image})
-        (redirect (str "/posts/" id))))))
+        (redirect (str "/post/" id))))))
 
 (defn- confirm-delete-post-handler [req]
   (require-login req
@@ -710,32 +710,32 @@
   (POST "/comments/:id/reply" [] reply-submit-handler)
   (GET "/comments/:id/delete" [] confirm-delete-comment-handler)
   (POST "/comments/:id/delete" [] delete-comment-handler)
-  (GET "/articles/deleted" [] deleted-articles-handler)
-  (GET "/articles/drafts" [] drafts-handler)
-  (GET "/articles/new" [] new-article-handler)
+  (GET "/article/deleted" [] deleted-articles-handler)
+  (GET "/article/drafts" [] drafts-handler)
+  (GET "/article/new" [] new-article-handler)
   (POST "/articles" [] create-article-handler)
-  (GET ["/articles/:id/as-of/:as-of" :as-of #".*"] [] article-handler)
-  (GET "/articles/:id/version/:version/comment/:comment-id" [] comment-page-handler)
-  (GET "/articles/:id/version/:version/comments" [] version-comments-handler)
-  (GET "/articles/:id/version/:version/comment" [] comment-form-handler)
-  (POST "/articles/:id/version/:version/comment" [] comment-submit-handler)
-  (GET "/articles/:id/version/:version" [] article-handler)
-  (GET "/articles/:id/comments" [] article-comments-handler)
-  (GET "/articles/:id" [] article-handler)
-  (GET "/articles/:id/edit" [] edit-article-handler)
-  (GET "/articles/:id/delete" [] confirm-delete-article-handler)
-  (POST "/articles/:id/delete" [] delete-article-handler)
-  (POST "/articles/:id" [] update-article-handler)
+  (GET ["/article/:id/as-of/:as-of" :as-of #".*"] [] article-handler)
+  (GET "/article/:id/version/:version/comment/:comment-id" [] comment-page-handler)
+  (GET "/article/:id/version/:version/comments" [] version-comments-handler)
+  (GET "/article/:id/version/:version/comment" [] comment-form-handler)
+  (POST "/article/:id/version/:version/comment" [] comment-submit-handler)
+  (GET "/article/:id/version/:version" [] article-handler)
+  (GET "/article/:id/comments" [] article-comments-handler)
+  (GET "/article/:id" [] article-handler)
+  (GET "/article/:id/edit" [] edit-article-handler)
+  (GET "/article/:id/delete" [] confirm-delete-article-handler)
+  (POST "/article/:id/delete" [] delete-article-handler)
+  (POST "/article/:id" [] update-article-handler)
   (GET "/posts" [] posts-handler)
-  (GET "/posts/deleted" [] deleted-posts-handler)
-  (GET "/posts/new" [] new-post-handler)
+  (GET "/post/deleted" [] deleted-posts-handler)
+  (GET "/post/new" [] new-post-handler)
   (POST "/posts" [] create-post-handler)
-  (GET ["/posts/:id/as-of/:as-of" :as-of #".*"] [] post-handler)
-  (GET "/posts/:id" [] post-handler)
-  (GET "/posts/:id/edit" [] edit-post-handler)
-  (GET "/posts/:id/delete" [] confirm-delete-post-handler)
-  (POST "/posts/:id/delete" [] delete-post-handler)
-  (POST "/posts/:id" [] update-post-handler)
+  (GET ["/post/:id/as-of/:as-of" :as-of #".*"] [] post-handler)
+  (GET "/post/:id" [] post-handler)
+  (GET "/post/:id/edit" [] edit-post-handler)
+  (GET "/post/:id/delete" [] confirm-delete-post-handler)
+  (POST "/post/:id/delete" [] delete-post-handler)
+  (POST "/post/:id" [] update-post-handler)
   (GET "/email" [] email-page-handler)
   (POST "/email" [] email-submit-handler)
   (POST "/email/message" [] message-submit-handler)

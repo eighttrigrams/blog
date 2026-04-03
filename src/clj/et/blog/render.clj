@@ -63,7 +63,7 @@
                   e (min end (count text))
                   excerpt (subs text s e)]
               (str "\n\n> " (str/replace excerpt #"\n" "\n> ")
-                   "\n>\n> — [" (:title article) "](/articles/" article-id "/as-of/" as-of ")"
+                   "\n>\n> — [" (:title article) "](/article/" article-id "/as-of/" as-of ")"
                    "\n\n"))
             (str "\n\n> [Citation not found: article " article-id " as-of " as-of "]\n\n")))
         (catch Exception _
