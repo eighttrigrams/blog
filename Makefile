@@ -1,9 +1,12 @@
-.PHONY: restart deploy backup backup-replay
+.PHONY: restart deploy backup backup-replay test
 
 restart:
 	@lsof -ti :3028 | xargs kill 2>/dev/null; sleep 1 && DEV=true clj -M -m et.blog.server &
 
-deploy: backup
+test:
+	clojure -M:test
+
+deploy: backup test
 	fly deploy
 
 backup:
