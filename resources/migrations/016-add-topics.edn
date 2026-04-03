@@ -1,0 +1,4 @@
+{:id "016-add-topics"
+ :up ["ALTER TABLE article_meta ADD COLUMN topics TEXT NOT NULL DEFAULT ''"]
+ :down []
+ :transactions false}

@@ -66,7 +66,7 @@
 
 (def article-defaults
   {"subtitle" "" "footnotes" "" "addenda" "" "preamble" ""
-   "preview-image" "" "abstract" ""})
+   "preview-image" "" "abstract" "" "topics" ""})
 
 (defn article-params [overrides]
   (merge article-defaults overrides))

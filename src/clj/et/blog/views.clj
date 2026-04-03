@@ -128,9 +128,15 @@
           [:a {:href "/logout"} "Logout"])]]
       body]])))
 
-(defn home-page [{:keys [articles logged-in?]}]
+(defn home-page [{:keys [articles logged-in? topic]}]
   (layout {:title nil :logged-in? logged-in?}
     [:h1 "Articles"]
+    [:div {:style "margin-bottom: 1.5rem; display: flex; gap: 1rem;"}
+     (for [[label val] [["SWE" "swe"] ["Modelling" "modelling"] ["Thoughts" "thoughts"]]]
+       (if (= topic val)
+         [:strong {:style "color: rgba(0,0,0,0.8);"} label]
+         [:a {:href (str "/articles?topic=" val) :style "color: rgba(0,0,0,0.5); text-decoration: none;"} label]))
+]
     (if (seq articles)
       [:ul.article-list
        (for [{:keys [article_id title subtitle preview_image abstract latest-version latest-published-at]} articles]
@@ -435,7 +441,7 @@
      [:button.btn {:type "submit"} "Login"]]))
 
 (defn edit-page [{:keys [article logged-in? new? error post-content]}]
-  (let [action (if new? "/articles" (str "/article/" (:article_id article)))]
+  (let [action (if new? "/article" (str "/article/" (:article_id article)))]
     (layout {:title (if new? "New Article" "Edit Article") :logged-in? logged-in?}
       (when error
         [:p.error error])
@@ -462,6 +468,9 @@
        [:div.form-group
         [:label {:for "abstract"} "Abstract"]
         [:textarea {:name "abstract" :id "abstract" :style "min-height: 80px;"} (or (:abstract article) "")]]
+       [:div.form-group
+        [:label {:for "topics"} "Categories"]
+        [:input {:type "text" :name "topics" :id "topics" :value (or (:topics article) "")}]]
        [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content"} (or (:content article) "")]]

@@ -17,7 +17,7 @@
 (deftest create-draft-article
   (let [app (t/make-app)
         token (t/login app)
-        resp (t/POST app "/articles"
+        resp (t/POST app "/article"
                (t/article-params {"title" "Draft Article" "content" "Draft body"})
                token)]
     (is (= 302 (:status resp)))
@@ -36,7 +36,7 @@
 (deftest create-published-article
   (let [app (t/make-app)
         token (t/login app)
-        resp (t/POST app "/articles"
+        resp (t/POST app "/article"
                (t/article-params {"title" "Published Article" "content" "Article body here"
                                   "subtitle" "A subtitle"
                                   "publish" "1" "post-content" "Post announcement text"})
@@ -66,7 +66,7 @@
 (deftest edit-article
   (let [app (t/make-app)
         token (t/login app)
-        create-resp (t/POST app "/articles"
+        create-resp (t/POST app "/article"
                       (t/article-params {"title" "Original Title" "content" "Original content"})
                       token)
         article-id (str/replace (t/redirect-location create-resp) "/article/" "")]
@@ -85,7 +85,7 @@
 (deftest delete-article
   (let [app (t/make-app)
         token (t/login app)
-        create-resp (t/POST app "/articles"
+        create-resp (t/POST app "/article"
                       (t/article-params {"title" "To Delete" "content" "Will be gone"
                                          "publish" "1" "post-content" "Bye"})
                       token)
@@ -104,7 +104,7 @@
 (deftest article-versioning
   (let [app (t/make-app)
         token (t/login app)]
-    (t/POST app "/articles"
+    (t/POST app "/article"
       (t/article-params {"title" "Versioned" "content" "v0 content"})
       token)
     (testing "first publish creates version 1"
@@ -130,7 +130,7 @@
 (deftest create-article-blank-title-rejected
   (let [app (t/make-app)
         token (t/login app)
-        resp (t/POST app "/articles"
+        resp (t/POST app "/article"
                (t/article-params {"title" "   " "content" "Body"})
                token)]
     (is (= 400 (:status resp)) "blank title must be rejected")))
@@ -138,12 +138,41 @@
 (deftest publish-without-post-content-rejected
   (let [app (t/make-app)
         token (t/login app)
-        resp (t/POST app "/articles"
+        resp (t/POST app "/article"
                (t/article-params {"title" "No Post" "content" "Body"
                                   "publish" "1" "post-content" ""})
                token)]
     (is (= 400 (:status resp)))
     (is (str/includes? (:body resp) "Post content is required"))))
+
+(deftest topic-filtering
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/POST app "/article"
+      (t/article-params {"title" "Software Post" "content" "About code"
+                         "topics" "swe"
+                         "publish" "1" "post-content" "SWE post"})
+      token)
+    (t/POST app "/article"
+      (t/article-params {"title" "Thinking Post" "content" "About ideas"
+                         "topics" "thoughts"
+                         "publish" "1" "post-content" "Thoughts post"})
+      token)
+    (testing "no filter shows all articles"
+      (let [resp (t/GET app "/")]
+        (is (str/includes? (:body resp) "Software Post"))
+        (is (str/includes? (:body resp) "Thinking Post"))))
+    (testing "filtering by swe shows only matching article"
+      (let [resp (t/GET app "/articles?topic=swe")]
+        (is (str/includes? (:body resp) "Software Post"))
+        (is (not (str/includes? (:body resp) "Thinking Post")))))
+    (testing "filtering is case insensitive"
+      (let [resp (t/GET app "/articles?topic=SWE")]
+        (is (str/includes? (:body resp) "Software Post"))))
+    (testing "filtering by unknown topic shows none"
+      (let [resp (t/GET app "/articles?topic=nope")]
+        (is (not (str/includes? (:body resp) "Software Post")))
+        (is (not (str/includes? (:body resp) "Thinking Post")))))))
 
 (deftest nonexistent-article-returns-404
   (let [app (t/make-app)

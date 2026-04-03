@@ -88,6 +88,7 @@
 
 (defn- home-handler [req]
   (let [auth? (logged-in? req)
+        topic (get-in req [:query-params "topic"])
         articles (db/list-articles (ensure-ds) {:published-only? (not auth?)})
         article-ids (mapv :article_id articles)
         post-dates (db/get-articles-latest-post-dates (ensure-ds) article-ids)
@@ -97,9 +98,12 @@
                                    resolve-preview-image
                                    (assoc :latest-version (:article_version pd))
                                    (assoc :latest-published-at (:published_at pd)))))
-                      (sort-by :latest-published-at #(compare %2 %1)))]
+                      (sort-by :latest-published-at #(compare %2 %1)))
+        articles (if topic
+                   (filter #(some #{(str/lower-case topic)} (map str/lower-case (str/split (or (:topics %) "") #"\s+"))) articles)
+                   articles)]
     (html-response 200
-      (views/home-page {:articles articles :logged-in? auth?}))))
+      (views/home-page {:articles articles :logged-in? auth? :topic topic}))))
 
 (defn- article-handler [req]
   (let [auth? (logged-in? req)
@@ -193,9 +197,10 @@
             preamble (or (get-in req [:form-params "preamble"]) "")
             preview-image (or (get-in req [:form-params "preview-image"]) "")
             abstract (or (get-in req [:form-params "abstract"]) "")
+            topics (or (get-in req [:form-params "topics"]) "")
             post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
             publish? (some? (get-in req [:form-params "publish"]))
-            article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract}]
+            article {:title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract :topics topics}]
         (cond
           (str/blank? title)
           (html-response 400
@@ -240,9 +245,10 @@
             preamble (or (get-in req [:form-params "preamble"]) "")
             preview-image (or (get-in req [:form-params "preview-image"]) "")
             abstract (or (get-in req [:form-params "abstract"]) "")
+            topics (or (get-in req [:form-params "topics"]) "")
             post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
             publish? (some? (get-in req [:form-params "publish"]))
-            article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract}]
+            article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract :topics topics}]
         (cond
           (str/blank? title)
           (html-response 400
@@ -701,6 +707,7 @@
 
 (defroutes app-routes
   (GET "/" [] home-handler)
+  (GET "/articles" [] home-handler)
   (GET "/login" [] login-page-handler)
   (POST "/login" [] login-handler)
   (GET "/logout" [] logout-handler)
@@ -713,7 +720,7 @@
   (GET "/article/deleted" [] deleted-articles-handler)
   (GET "/article/drafts" [] drafts-handler)
   (GET "/article/new" [] new-article-handler)
-  (POST "/articles" [] create-article-handler)
+  (POST "/article" [] create-article-handler)
   (GET ["/article/:id/as-of/:as-of" :as-of #".*"] [] article-handler)
   (GET "/article/:id/version/:version/comment/:comment-id" [] comment-page-handler)
   (GET "/article/:id/version/:version/comments" [] version-comments-handler)

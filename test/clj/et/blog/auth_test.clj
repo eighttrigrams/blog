@@ -22,6 +22,6 @@
         (is (= 302 (:status resp)))
         (is (= "/login" (t/redirect-location resp))
             (str "GET " path " should redirect when unauthenticated"))))
-    (let [resp (t/POST app "/articles" {"title" "Sneaky" "content" "Nope"})]
+    (let [resp (t/POST app "/article" {"title" "Sneaky" "content" "Nope"})]
       (is (= 302 (:status resp)))
       (is (= "/login" (t/redirect-location resp))))))

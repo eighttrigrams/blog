@@ -7,7 +7,7 @@
 (deftest submit-comment-on-article
   (let [app (t/make-app)
         token (t/login app)
-        create-resp (t/POST app "/articles"
+        create-resp (t/POST app "/article"
                       (t/article-params {"title" "Commentable" "content" "Discuss me"
                                          "publish" "1" "post-content" "Published post"})
                       token)
@@ -32,7 +32,7 @@
 (deftest comment-with-missing-fields-rejected
   (let [app (t/make-app)
         token (t/login app)
-        _ (t/POST app "/articles"
+        _ (t/POST app "/article"
             (t/article-params {"title" "For Comment" "content" "Body"
                                "publish" "1" "post-content" "Post"})
             token)
@@ -43,7 +43,7 @@
 (deftest comment-has-own-page
   (let [app (t/make-app)
         token (t/login app)
-        _ (t/POST app "/articles"
+        _ (t/POST app "/article"
             (t/article-params {"title" "My Article" "content" "Content"
                                "publish" "1" "post-content" "Post"})
             token)
@@ -65,7 +65,7 @@
 (deftest article-comments-list
   (let [app (t/make-app)
         token (t/login app)
-        _ (t/POST app "/articles"
+        _ (t/POST app "/article"
             (t/article-params {"title" "Versioned" "content" "V1"
                                "publish" "1" "post-content" "Post v1"})
             token)
@@ -98,7 +98,7 @@
 (deftest comment-on-older-version
   (let [app (t/make-app)
         token (t/login app)
-        _ (t/POST app "/articles"
+        _ (t/POST app "/article"
             (t/article-params {"title" "Multi" "content" "V1"
                                "publish" "1" "post-content" "Post"})
             token)
