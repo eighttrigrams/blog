@@ -31,7 +31,7 @@
         a:hover { text-decoration: underline; }
         a:visited { color: #1a0dab; }
         nav { border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 0.75rem; margin-bottom: 2.5rem; display: flex; justify-content: space-between; align-items: center; }
-        nav a { color: rgba(0,0,0,0.8); margin-right: 1.25rem; }
+        nav a, nav a:visited { color: rgba(0,0,0,0.8); margin-right: 1.25rem; }
         nav a:hover { color: #FD5353; }
         .nav-right { display: flex; align-items: center; gap: 0.75rem; }
         .action-link, .action-link:visited { color: #FD5353; }
