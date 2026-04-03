@@ -3,7 +3,7 @@
             [hiccup2.core :as h]
             [hiccup.util :as hu]
             [et.blog.render :as render]
-            [et.blog.util :refer [human-date]]))
+            [et.blog.util :refer [human-date human-datetime]]))
 
 (defn layout [{:keys [title logged-in?]} & body]
   (str
@@ -225,7 +225,7 @@
   (if (str/blank? text) 0
     (count (str/split (str/trim text) #"\s+"))))
 
-(defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda rendered-preamble]}]
+(defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda rendered-preamble comments]}]
   (let [{:keys [article_id title subtitle created_at version content]} article]
     (layout {:title title :logged-in? logged-in?}
       [:article
@@ -247,7 +247,56 @@
        (when rendered-addenda
          [:div.article-section
           [:h3 "Addenda:"]
-          [:div.article-content (h/raw rendered-addenda)]])])))
+          [:div.article-content (h/raw rendered-addenda)]])]
+      (when (and version (pos? version))
+        [:div.comments-section {:style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.15); padding-top: 1.5rem;"}
+         (when (seq comments)
+           [:div
+            (for [{:keys [id display_name body article_version created_at]} comments]
+              [:div {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
+               [:p {:style "margin: 0; color: rgba(0,0,0,0.5); font-size: 0.9rem;"}
+                [:strong {:style "color: rgba(0,0,0,0.8);"} display_name]
+                " commented"
+                (when (> (count versions) 1)
+                  (list " on " [:span.version-badge (str "v" article_version)] " of the article,"))
+                " on " (human-datetime created_at)
+                (when logged-in?
+                  (list " " [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]))]
+               [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]])])
+         [:a.action-link {:href (str "/articles/" article_id "/version/" version "/comment")} "Leave a comment"]]))))
+
+(defn comment-form-page [{:keys [article logged-in? error]}]
+  (let [{:keys [article_id version title]} article]
+    (layout {:title (str "Comment on " title) :logged-in? logged-in?}
+      [:h1 "Leave a comment"]
+      [:p "On: " [:strong title] " (v" version ")"]
+      (when error
+        [:p.error error])
+      [:form {:method "POST" :action (str "/articles/" article_id "/version/" version "/comment") :style "max-width: 500px;"}
+       [:div.form-group
+        [:label {:for "display-name"} "Display name"]
+        [:input {:type "text" :name "display-name" :id "display-name" :required true}]]
+       [:div.form-group
+        [:label {:for "email"} "Email (won't be displayed)"]
+        [:input {:type "email" :name "email" :id "email" :required true}]]
+       [:div.form-group
+        [:label {:for "body"} "Comment"]
+        [:textarea {:name "body" :id "body" :required true :style "min-height: 150px;"}]]
+       [:button.btn {:type "submit"} "Submit"]])))
+
+(defn confirm-delete-comment-page [{:keys [comment logged-in?]}]
+  (layout {:title "Delete Comment" :logged-in? logged-in?}
+    [:h1 "Delete Comment"]
+    [:div.confirm-box
+     [:p "Are you sure you want to delete this comment by " [:strong (:display_name comment)] "?"]
+     [:div.article-content {:style "margin: 0.5rem 0;"} (h/raw (render/markdown->html (:body comment)))]
+     [:form {:method "POST" :action (str "/comments/" (:id comment) "/delete")}
+      [:div.form-group
+       [:label {:for "reason"} "Reason (optional)"]
+       [:textarea {:name "reason" :id "reason" :style "min-height: 80px;"}]]
+      [:div.confirm-actions
+       [:button.btn.btn-danger {:type "submit"} "Delete"]
+       [:a.btn.btn-cancel {:href (str "/articles/" (:article_id comment) "/version/" (:article_version comment))} "Cancel"]]]]))
 
 (defn login-page [{:keys [error]}]
   (layout {:title "Login"}

@@ -122,13 +122,16 @@
             fetch-fn (fn [aid as-of] (db/get-article-version (ensure-ds) aid as-of {}))
             rendered-content (render/render-content article fetch-fn)
             rendered-addenda (render/markdown->html (:addenda article))
-            rendered-preamble (render/markdown->html (:preamble article))]
+            rendered-preamble (render/markdown->html (:preamble article))
+            comments (when (and (:version article) (pos? (:version article)))
+                       (db/get-comments-up-to-version (ensure-ds) id (:version article)))]
         (html-response 200
           (views/article-page {:article article :versions versions :logged-in? auth?
                                :current-version (:created_at article)
                                :rendered-content rendered-content
                                :rendered-addenda rendered-addenda
-                               :rendered-preamble rendered-preamble})))
+                               :rendered-preamble rendered-preamble
+                               :comments comments})))
       (html-response 404
         (views/not-found-page {:logged-in? auth?})))))
 
@@ -256,6 +259,82 @@
                       base (site-url req)]
                   (mail/send-article-notification! subscribers title subtitle post-content (str base "/articles/" id)))))
             (redirect (str "/articles/" id))))))))
+
+(defn- comment-form-handler [req]
+  (let [id (Integer/parseInt (get-in req [:params :id]))
+        ver (Integer/parseInt (get-in req [:params :version]))
+        article (db/get-article-by-version (ensure-ds) id ver {})]
+    (if (and article (pos? ver))
+      (html-response 200
+        (views/comment-form-page {:article article :logged-in? (logged-in? req)}))
+      (html-response 404
+        (views/not-found-page {:logged-in? (logged-in? req)})))))
+
+(defn- comment-submit-handler [req]
+  (let [id (Integer/parseInt (get-in req [:params :id]))
+        ver (Integer/parseInt (get-in req [:params :version]))
+        article (db/get-article-by-version (ensure-ds) id ver {})]
+    (if (or (nil? article) (zero? ver))
+      (html-response 404
+        (views/not-found-page {:logged-in? (logged-in? req)}))
+      (if-not (circuit-breaker/check-and-record!)
+        (html-response 503
+          (views/comment-form-page {:article article :logged-in? (logged-in? req)
+                                    :error "This functionality is temporarily unavailable. Please try again later."}))
+        (let [email (str/trim (or (get-in req [:form-params "email"]) ""))
+              display-name (str/trim (or (get-in req [:form-params "display-name"]) ""))
+              body (str/trim (or (get-in req [:form-params "body"]) ""))]
+          (if (or (str/blank? email) (str/blank? display-name) (str/blank? body))
+            (html-response 400
+              (views/comment-form-page {:article article :logged-in? (logged-in? req)
+                                        :error "All fields are required."}))
+            (do
+              (db/create-comment! (ensure-ds) id ver email display-name body)
+              (future
+                (try
+                  (tracker/send-message!
+                    (str "Blog comment on \"" (:title article) "\" (v" ver ")")
+                    (str "From: " display-name " <" email ">\n\n" body)
+                    "eighttrigrams.net")
+                  (catch Exception e
+                    (println "Failed to forward comment to tracker:" (.getMessage e)))))
+              (redirect (str "/articles/" id "/version/" ver)))))))))
+
+(defn- confirm-delete-comment-handler [req]
+  (require-login req
+    (fn [req]
+      (let [id (Integer/parseInt (get-in req [:params :id]))
+            comment (db/get-comment (ensure-ds) id)]
+        (if comment
+          (html-response 200
+            (views/confirm-delete-comment-page {:comment comment :logged-in? true}))
+          (html-response 404
+            (views/not-found-page {:logged-in? true})))))))
+
+(defn- delete-comment-handler [req]
+  (require-login req
+    (fn [_]
+      (let [id (Integer/parseInt (get-in req [:params :id]))
+            comment (db/get-comment (ensure-ds) id)
+            reason (str/trim (or (get-in req [:form-params "reason"]) ""))]
+        (if comment
+          (do
+            (db/delete-comment! (ensure-ds) id)
+            (future
+              (try
+                (let [article (db/get-article-by-version (ensure-ds) (:article_id comment) (:article_version comment) {})
+                      article-title (or (:title article) (str "Article " (:article_id comment)))
+                      body (str "Your comment on \"" article-title "\" (v" (:article_version comment) ") has been removed."
+                                (when (not= reason "")
+                                  (str "\n\nReason: " reason)))]
+                  (mail/send-plain-email! (:email comment)
+                    (str "Comment removed: " article-title)
+                    body))
+                (catch Exception e
+                  (println "Failed to send comment deletion email:" (.getMessage e)))))
+            (redirect (str "/articles/" (:article_id comment) "/version/" (:article_version comment))))
+          (html-response 404
+            (views/not-found-page {:logged-in? true})))))))
 
 (defn- confirm-delete-article-handler [req]
   (require-login req
@@ -485,11 +564,15 @@
   (GET "/login" [] login-page-handler)
   (POST "/login" [] login-handler)
   (GET "/logout" [] logout-handler)
+  (GET "/comments/:id/delete" [] confirm-delete-comment-handler)
+  (POST "/comments/:id/delete" [] delete-comment-handler)
   (GET "/articles/deleted" [] deleted-articles-handler)
   (GET "/articles/drafts" [] drafts-handler)
   (GET "/articles/new" [] new-article-handler)
   (POST "/articles" [] create-article-handler)
   (GET ["/articles/:id/as-of/:as-of" :as-of #".*"] [] article-handler)
+  (GET "/articles/:id/version/:version/comment" [] comment-form-handler)
+  (POST "/articles/:id/version/:version/comment" [] comment-submit-handler)
   (GET "/articles/:id/version/:version" [] article-handler)
   (GET "/articles/:id" [] article-handler)
   (GET "/articles/:id/edit" [] edit-article-handler)

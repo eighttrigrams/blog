@@ -37,3 +37,12 @@
           (println (str "Sent notification to " email))
           (catch Exception e
             (println (str "Failed to send to " email ": " (.getMessage e)))))))))
+
+(defn send-plain-email! [to subject body]
+  (let [config (smtp-config)]
+    (when (and (:user config) (:pass config))
+      (postal/send-message config
+        {:from "dan@eighttrigrams.net"
+         :to to
+         :subject subject
+         :body body}))))

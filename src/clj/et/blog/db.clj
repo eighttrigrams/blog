@@ -505,3 +505,30 @@
     (jdbc/execute! conn
       ["SELECT id, email, message, created_at FROM messages ORDER BY created_at DESC"]
       jdbc-opts)))
+
+(defn create-comment! [ds article-id article-version email display-name body]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["INSERT INTO comments (article_id, article_version, email, display_name, body) VALUES (?, ?, ?, ?, ?)"
+       article-id article-version email display-name body])))
+
+(defn get-comment [ds comment-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["SELECT id, article_id, article_version, email, display_name, body, created_at FROM comments WHERE id = ?" comment-id]
+      jdbc-opts)))
+
+(defn delete-comment! [ds comment-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["DELETE FROM comments WHERE id = ?" comment-id])))
+
+(defn get-comments-up-to-version [ds article-id max-version]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT id, article_id, article_version, display_name, body, created_at
+        FROM comments
+        WHERE article_id = ? AND article_version <= ?
+        ORDER BY created_at ASC"
+       article-id max-version]
+      jdbc-opts)))
