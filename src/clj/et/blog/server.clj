@@ -326,7 +326,8 @@
                       article-title (or (:title article) (str "Article " (:article_id comment)))
                       body (str "Your comment on \"" article-title "\" (v" (:article_version comment) ") has been removed."
                                 (when (not= reason "")
-                                  (str "\n\nReason: " reason)))]
+                                  (str "\n\nReason: " reason))
+                                "\n\nYour comment was:\n\n" (:body comment))]
                   (mail/send-plain-email! (:email comment)
                     (str "Comment removed: " article-title)
                     body))
