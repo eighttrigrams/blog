@@ -44,7 +44,9 @@
   @ds)
 
 (defn admin-password []
-  (or (System/getenv "ADMIN_PASSWORD") "admin"))
+  (or (System/getenv "ADMIN_PASSWORD")
+      (when (= "true" (System/getenv "DEV")) "admin")
+      (throw (ex-info "ADMIN_PASSWORD env var is required" {}))))
 
 (defn- skip-logins? []
   (and (true? (:dangerously-skip-logins? @*config))
