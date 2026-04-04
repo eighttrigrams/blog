@@ -102,8 +102,19 @@
            "\" style=\"position:absolute;top:0;left:0;width:100%;height:100%;border:0;\""
            " allowfullscreen></iframe></div>"))))
 
+(def ^:private divider-pattern #"(?m)^-{3,}\s*$")
+
+(defn- split-at-divider [content]
+  (let [m (re-matcher divider-pattern content)]
+    (if (.find m)
+      [(subs content 0 (.start m)) (subs content (.end m))]
+      [content nil])))
+
+(defn- strip-divider [content]
+  (str/replace content divider-pattern ""))
+
 (defn render-content [{:keys [content footnotes]} fetch-fn]
-  (let [content (or content "")
+  (let [content (strip-divider (or content ""))
         ref-ids (find-footnote-refs content)
         ref-order (into {} (map-indexed (fn [i id] [id i]) ref-ids))
         def-map (or (parse-footnote-defs footnotes) {})
@@ -114,6 +125,15 @@
         html (embed-youtube html)
         footnotes-html (render-footnotes-html ref-ids def-map)]
     (str html (or footnotes-html ""))))
+
+(defn render-content-preview [{:keys [content] :as post} fetch-fn]
+  (let [[above below] (split-at-divider (or content ""))]
+    (if below
+      {:above-html (render-content (assoc post :content above) fetch-fn)
+       :below-html (render-content (assoc post :content below) fetch-fn)
+       :truncated? true}
+      {:above-html (render-content post fetch-fn)
+       :truncated? false})))
 
 (defn render-article-content [{:keys [content]}]
   (or (markdown->html (or content "")) ""))

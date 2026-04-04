@@ -74,6 +74,10 @@
         .post-permalink:hover { text-decoration: underline; }
         .post-article-link { margin-top: 0.75rem; font-weight: 600; }
         .article-preamble { margin-top: 1.5rem; font-style: italic; color: rgba(0,0,0,0.6); }
+        .post-see-more summary { cursor: pointer; color: rgba(0,0,0,0.35); font-size: 0.85rem; list-style: none; }
+        .post-see-more summary::-webkit-details-marker { display: none; }
+        .post-see-more summary:hover { text-decoration: underline; }
+        .post-see-more[open] summary { display: none; }
         .article-content { margin-top: 1.5rem; }
         .article-content img { max-width: 100%; height: auto; }
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
@@ -508,13 +512,20 @@
       [:p [:a.action-link {:href "/post/new"} "New Post"]])
     (if (seq posts)
       [:ul.post-list
-       (for [{:keys [post_id created_at first_at rendered-content article-link resolved-image]} posts]
+       (for [{:keys [post_id created_at first_at above-html below-html truncated? article-link resolved-image]} posts]
          [:li
           [:div.post-heading
            [:h2 [:a.post-permalink {:href (str "/post/" post_id)} "#"] " " (human-date (or first_at created_at))]
            (when logged-in?
              [:a.btn.btn-small {:href (str "/post/" post_id "/edit")} "Edit"])]
-          [:div.article-content (h/raw rendered-content)]
+          [:div.article-content
+           (h/raw above-html)
+           (when truncated?
+             [:details.post-see-more
+              [:summary "See more"]
+              (h/raw below-html)])]
+          (when (and resolved-image (not article-link))
+            [:img.article-preview {:src resolved-image}])
           (when article-link
             (list
               (when resolved-image
@@ -538,6 +549,8 @@
        (when logged-in?
          [:span [:a.btn.btn-small {:href (str "/post/" post_id "/edit")} "Edit"]])
        [:div.article-content (h/raw rendered-content)]
+       (when (and resolved-image (not article-link))
+         [:img.article-preview {:src resolved-image}])
        (when article-link
          (list
            (when resolved-image

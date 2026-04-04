@@ -14,10 +14,14 @@
         post-ids (mapv :post_id posts)
         article-links (db/get-posts-article-links (c/ensure-ds) post-ids)
         posts (->> posts
-                   (mapv #(-> %
-                              (assoc :rendered-content (render/render-content % fetch-fn)
-                                     :article-link (some-> (get article-links (:post_id %)) resolve-link-preview)
-                                     :resolved-image (not-empty (:image (c/resolve-image-field % :image)))))))]
+                   (mapv (fn [post]
+                           (let [{:keys [above-html below-html truncated?]} (render/render-content-preview post fetch-fn)]
+                             (assoc post
+                               :above-html above-html
+                               :below-html below-html
+                               :truncated? truncated?
+                               :article-link (some-> (get article-links (:post_id post)) resolve-link-preview)
+                               :resolved-image (not-empty (:image (c/resolve-image-field post :image))))))))]
     (c/html-response 200
       (views/posts-page {:posts posts :logged-in? auth?}))))
 
