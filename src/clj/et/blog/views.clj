@@ -54,11 +54,12 @@
         .article-preview { max-width: 300px; height: auto; margin-top: 0.5rem; display: block; }
         .article-version-info { color: rgba(0,0,0,0.4); font-size: 0.85rem; margin: 0 0 0.3rem 0; }
         .article-summary { color: rgba(0,0,0,0.5); font-size: 0.95rem; margin-top: 0.3rem; }
-        .article-row { display: flex; gap: 1rem; margin-top: 0.5rem; }
-        .article-row .article-preview { max-width: 100%; flex-shrink: 0; margin-top: 0; }
-        .article-row-left { width: 50%; }
-        .article-row-right { width: 50%; }
-        .article-row-right p:first-child { margin-top: 0; }
+        .article-summary p:first-child { margin-top: 0; }
+        .article-row { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 0 1rem; margin-top: 0.5rem; }
+        .article-row .article-version-info { grid-column: 2; grid-row: 1; margin: 0; }
+        .article-row-img { grid-column: 1; grid-row: 1 / 3; }
+        .article-row .article-preview { max-width: 100%; margin-top: 0; }
+        .article-row .article-summary { grid-column: 2; grid-row: 2; }
         .post-list { list-style: none; padding: 0; }
         .post-list li { margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
         .post-list li:last-child { border-bottom: none; }
@@ -112,7 +113,13 @@
         .btn-cancel { background: rgba(0,0,0,0.15); color: rgba(0,0,0,0.7); }
         .btn-cancel:hover { background: rgba(0,0,0,0.25); text-decoration: none; }
         .confirm-box { margin-top: 1.5rem; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 5px; }
-        .confirm-box .confirm-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }"]]
+        .confirm-box .confirm-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+        @media (max-width: 600px) {
+          .article-row { grid-template-columns: 1fr; grid-template-rows: auto; }
+          .article-row .article-version-info { grid-column: 1; grid-row: 1; }
+          .article-row-img { grid-column: 1; grid-row: 2; }
+          .article-row .article-summary { grid-column: 1; grid-row: 3; }
+        }"]]
      [:body
       [:nav
        [:div
@@ -155,15 +162,14 @@
                 has-ver (and latest-version latest-published-at)]
             (when (or has-img has-abs has-ver)
               [:div.article-row
+               (when has-ver
+                 [:p.article-version-info
+                  (str "Latest version " latest-version " published on " (human-date latest-published-at))])
                (when has-img
-                 [:div.article-row-left
+                 [:div.article-row-img
                   [:img.article-preview {:src preview_image :alt title}]])
-               [:div.article-row-right
-                (when has-ver
-                  [:p.article-version-info
-                   (str "Latest version " latest-version " published on " (human-date latest-published-at))])
-                (when has-abs
-                  [:div.article-summary (h/raw (render/markdown->html abstract))])]]))])]
+               (when has-abs
+                 [:div.article-summary (h/raw (render/markdown->html abstract))])]))])]
       [:p "No articles yet."])))
 
 (defn drafts-page [{:keys [articles logged-in?]}]
