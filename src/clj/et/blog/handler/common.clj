@@ -44,9 +44,11 @@
   @ds)
 
 (defn admin-password []
-  (or (System/getenv "ADMIN_PASSWORD")
-      (when (= "true" (System/getenv "DEV")) "admin")
-      (throw (ex-info "ADMIN_PASSWORD env var is required" {}))))
+  (if-let [pw (System/getenv "ADMIN_PASSWORD")]
+    pw
+    (if (System/getenv "FLY_APP_NAME")
+      (throw (ex-info "ADMIN_PASSWORD env var is required" {}))
+      "admin")))
 
 (defn- skip-logins? []
   (and (true? (:dangerously-skip-logins? @*config))
