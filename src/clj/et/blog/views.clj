@@ -55,11 +55,14 @@
         .article-version-info { color: rgba(0,0,0,0.4); font-size: 0.85rem; margin: 0 0 0.3rem 0; }
         .article-summary { color: rgba(0,0,0,0.5); font-size: 0.95rem; margin-top: 0.3rem; }
         .article-summary p:first-child { margin-top: 0; }
-        .article-row { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 0 1rem; margin-top: 0.5rem; }
+        .article-row { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 0 1rem; margin-top: 0.5rem; align-items: start; }
         .article-row .article-version-info { grid-column: 2; grid-row: 1; margin: 0; }
         .article-row-img { grid-column: 1; grid-row: 1 / 3; }
         .article-row .article-preview { max-width: 100%; margin-top: 0; }
         .article-row .article-summary { grid-column: 2; grid-row: 2; }
+        .article-row-no-img { grid-template-columns: 1fr; }
+        .article-row-no-img .article-version-info { grid-column: 1; max-width: 66%; }
+        .article-row-no-img .article-summary { grid-column: 1; max-width: 66%; }
         .post-list { list-style: none; padding: 0; }
         .post-list li { margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
         .post-list li:last-child { border-bottom: none; }
@@ -119,6 +122,8 @@
           .article-row .article-version-info { grid-column: 1; grid-row: 1; }
           .article-row-img { grid-column: 1; grid-row: 2; }
           .article-row .article-summary { grid-column: 1; grid-row: 3; }
+          .article-row-no-img .article-version-info,
+          .article-row-no-img .article-summary { max-width: 100%; }
         }"]]
      [:body
       [:nav
@@ -161,7 +166,7 @@
                 has-abs (and abstract (not= abstract ""))
                 has-ver (and latest-version latest-published-at)]
             (when (or has-img has-abs has-ver)
-              [:div.article-row
+              [:div {:class (str "article-row" (when-not has-img " article-row-no-img"))}
                (when has-ver
                  [:p.article-version-info
                   (str "Latest version " latest-version " published on " (human-date latest-published-at))])
