@@ -68,6 +68,8 @@
         .post-list li:last-child { border-bottom: none; }
         .post-list a { color: rgba(0,0,0,0.8); }
         .post-list a:hover { color: #FD5353; }
+        .post-list .article-content a, .post-list .article-content a:visited { color: #1a0dab; }
+        .post-list .article-content a:hover { text-decoration: underline; color: #1a0dab; }
         .post-heading { display: flex; justify-content: space-between; align-items: center; }
         .post-heading h2 { margin: 0; }
         .post-permalink { color: #1a0dab; text-decoration: none; }
