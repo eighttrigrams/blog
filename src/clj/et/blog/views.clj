@@ -135,7 +135,7 @@
       [:nav
        [:div
         [:a {:href "/posts"} "Posts"]
-        [:a {:href "/"} "Articles"]
+        [:a {:href "/articles"} "Articles"]
         (when logged-in?
           [:a {:href "/article/drafts"} "Drafts"])]
        [:div.nav-right
@@ -153,7 +153,7 @@
 
 (defn home-page [{:keys [articles logged-in? topic]}]
   (layout {:title nil :logged-in? logged-in?}
-    [:h1 [:a {:href "/" :class "article-list-link"} "Articles"]]
+    [:h1 [:a {:href "/articles" :class "article-list-link"} "Articles"]]
     [:div {:style "margin-bottom: 1.5rem; display: flex; gap: 1rem;"}
      (for [[label val] [["SWE" "swe"] ["Modelling" "modelling"] ["Thoughts" "thoughts"]]]
        (if (= topic val)
