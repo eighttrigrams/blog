@@ -31,7 +31,7 @@
       (handler (assoc req :cookies cookies)))))
 
 (defroutes app-routes
-  (GET "/" [] articles-h/home-handler)
+  (GET "/" [] (fn [req] (articles-h/article-handler (assoc-in req [:params :id] "36"))))
   (GET "/articles" [] articles-h/home-handler)
   (GET "/login" [] auth-h/login-page-handler)
   (POST "/login" [] auth-h/login-handler)
