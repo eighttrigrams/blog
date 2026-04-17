@@ -6,7 +6,7 @@
 
 (deftest home-page-starts-empty
   (let [app (t/make-app)
-        resp (t/GET app "/")
+        resp (t/GET app "/articles")
         html (t/parse resp)]
     (is (= 200 (:status resp)))
     (is (some? (t/select-one html (hs/find-in-text #"No articles yet\.")))
@@ -23,7 +23,7 @@
     (is (= 302 (:status resp)))
     (is (str/starts-with? (t/redirect-location resp) "/article/"))
     (testing "draft does NOT appear on public home page"
-      (let [home (t/GET app "/")]
+      (let [home (t/GET app "/articles")]
         (is (str/includes? (:body home) "No articles yet."))
         (is (not (str/includes? (:body home) "Draft Article")))))
     (testing "draft appears on authenticated drafts page"
@@ -44,7 +44,7 @@
         article-id (str/replace (t/redirect-location resp) "/article/" "")]
     (is (= 302 (:status resp)))
     (testing "published article appears on public home page"
-      (let [home (t/GET app "/")
+      (let [home (t/GET app "/articles")
             html (t/parse home)
             lis (t/select-all html (hs/descendant (hs/class "article-list") (hs/tag :li)))]
         (is (not (str/includes? (:body home) "No articles yet.")))
@@ -99,7 +99,7 @@
       (let [resp (t/GET app "/article/deleted" token)]
         (is (str/includes? (:body resp) "To Delete"))))
     (testing "home page is empty again"
-      (is (str/includes? (:body (t/GET app "/")) "No articles yet.")))))
+      (is (str/includes? (:body (t/GET app "/articles")) "No articles yet.")))))
 
 (deftest article-versioning
   (let [app (t/make-app)
@@ -159,7 +159,7 @@
                          "publish" "1" "post-content" "Thoughts post"})
       token)
     (testing "no filter shows all articles"
-      (let [resp (t/GET app "/")]
+      (let [resp (t/GET app "/articles")]
         (is (str/includes? (:body resp) "Software Post"))
         (is (str/includes? (:body resp) "Thinking Post"))))
     (testing "filtering by swe shows only matching article"
