@@ -19,6 +19,7 @@
                                    (assoc :latest-version (:article_version pd))
                                    (assoc :latest-published-at (:published_at pd)))))
                       (sort-by :latest-published-at #(compare %2 %1)))
+        articles (if auth? articles (remove #(= 36 (:article_id %)) articles))
         articles (if topic
                    (filter #(some #{(str/lower-case topic)} (map str/lower-case (str/split (or (:topics %) "") #"\s+"))) articles)
                    articles)]
@@ -139,13 +140,14 @@
             topics (or (get-in req [:form-params "topics"]) "")
             post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
             publish? (some? (get-in req [:form-params "publish"]))
+            skip-post? (= id 36)
             article {:article_id id :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract :topics topics}]
         (cond
           (str/blank? title)
           (c/html-response 400
             (views/edit-page {:article article :logged-in? true}))
 
-          (and publish? (str/blank? post-content))
+          (and publish? (not skip-post?) (str/blank? post-content))
           (c/html-response 400
             (views/edit-page {:article article :logged-in? true
                               :error "Post content is required when publishing."
@@ -154,8 +156,8 @@
           :else
           (do
             (db/update-article! (c/ensure-ds) id (merge article {:publish? publish?
-                                                                  :post-content (when publish? post-content)}))
-            (when publish?
+                                                                  :post-content (when (and publish? (not skip-post?)) post-content)}))
+            (when (and publish? (not skip-post?))
               (future
                 (let [subscribers (db/list-email-subscribers (c/ensure-ds))
                       base (c/site-url req)]
