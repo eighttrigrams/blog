@@ -302,26 +302,28 @@
        [:h1 title]
        (when (and subtitle (not= subtitle ""))
          [:p.subtitle subtitle])
-       [:p.word-count (str (word-count content) " words")]
-       (if (> (count versions) 1)
-         (version-nav "/article/" :article_id article (or current-version created_at) versions)
-         [:div.version-nav [:span.article-date created_at]])
-       (let [pub-versions (->> versions (map :version) (filter pos?) distinct sort vec)]
-         (if (and version (pos? version) (> (count pub-versions) 1))
-           (let [idx (.indexOf pub-versions version)
-                 prev-ver (when (pos? idx) (nth pub-versions (dec idx)))
-                 next-ver (when (< idx (dec (count pub-versions))) (nth pub-versions (inc idx)))]
-             [:div.version-nav
-              (if prev-ver
-                [:a.version-arrow {:href (str "/article/" article_id "/version/" prev-ver)} "\u2190"]
-                [:span.version-arrow.disabled "\u2190"])
-              [:span.version-badge (str "v" version)]
-              (if next-ver
-                [:a.version-arrow {:href (str "/article/" article_id "/version/" next-ver)} "\u2192"]
-                [:span.version-arrow.disabled "\u2192"])])
-           (if (and version (pos? version))
-             [:span.version-badge (str "v" version)]
-             (when logged-in? [:span.version-badge.draft "draft"]))))
+       (when (or logged-in? (not= article_id 36))
+         (list
+           [:p.word-count (str (word-count content) " words")]
+           (if (> (count versions) 1)
+             (version-nav "/article/" :article_id article (or current-version created_at) versions)
+             [:div.version-nav [:span.article-date created_at]])
+           (let [pub-versions (->> versions (map :version) (filter pos?) distinct sort vec)]
+             (if (and version (pos? version) (> (count pub-versions) 1))
+               (let [idx (.indexOf pub-versions version)
+                     prev-ver (when (pos? idx) (nth pub-versions (dec idx)))
+                     next-ver (when (< idx (dec (count pub-versions))) (nth pub-versions (inc idx)))]
+                 [:div.version-nav
+                  (if prev-ver
+                    [:a.version-arrow {:href (str "/article/" article_id "/version/" prev-ver)} "\u2190"]
+                    [:span.version-arrow.disabled "\u2190"])
+                  [:span.version-badge (str "v" version)]
+                  (if next-ver
+                    [:a.version-arrow {:href (str "/article/" article_id "/version/" next-ver)} "\u2192"]
+                    [:span.version-arrow.disabled "\u2192"])])
+               (if (and version (pos? version))
+                 [:span.version-badge (str "v" version)]
+                 (when logged-in? [:span.version-badge.draft "draft"]))))))
        (when logged-in?
          [:span " " [:a.btn.btn-small {:href (str "/article/" article_id "/edit")} "Edit"]])
        (when rendered-preamble
@@ -331,7 +333,8 @@
          [:div {:style "margin-top: 2rem;"}
           [:h3 {:style "font-size: 1rem; font-weight: 600; font-style: italic; color: rgba(0,0,0,0.65); margin-bottom: 0;"} "Addenda:"]
           [:div.article-content (h/raw rendered-addenda)]])]
-      (comments-section article_id version versions comments logged-in?))))
+      (when (or logged-in? (not= article_id 36))
+        (comments-section article_id version versions comments logged-in?)))))
 
 (defn comment-form-page [{:keys [article logged-in? error]}]
   (let [{:keys [article_id version title]} article]
