@@ -193,12 +193,14 @@
      [:p [:a.action-link {:href "/article/new"} "New Article"]]
      (if (seq articles)
        [:ul.article-list
-        (for [{:keys [article_id title subtitle]} articles]
+        (for [{:keys [article_id title subtitle preview_image]} articles]
           [:li
            [:a {:href (str "/article/" article_id)}
             [:h2 title]]
            (when (and subtitle (not= subtitle ""))
-             [:p.subtitle subtitle])])]
+             [:p.subtitle subtitle])
+           (when (and preview_image (not= preview_image ""))
+             [:img.article-preview {:src preview_image :alt title}])])]
        [:p "No drafts."])]))
 
 (defn email-page [{:keys [logged-in? notice error messages subscribers]}]
