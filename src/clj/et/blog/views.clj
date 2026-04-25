@@ -123,6 +123,10 @@
         .btn-cancel:hover { background: rgba(0,0,0,0.25); text-decoration: none; }
         .confirm-box { margin-top: 1.5rem; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 5px; }
         .confirm-box .confirm-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+        .symbol-palette { position: fixed; top: 50%; right: 0.75rem; transform: translateY(-50%); display: flex; flex-direction: column; gap: 0.4rem; z-index: 100; }
+        .symbol-palette button { width: 2rem; height: 2rem; padding: 0; background: #fff; border: 1px solid rgba(0,0,0,0.8); border-radius: 2px; font-family: Spectral, Georgia, serif; font-size: 1.125rem; color: #000; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; }
+        .symbol-palette button:hover { background: rgba(0,0,0,0.05); }
+        @media (max-width: 900px) { .symbol-palette { display: none; } }
         @media (max-width: 600px) {
           .article-row { grid-template-columns: 1fr; grid-template-rows: auto; }
           .article-row .article-version-info { grid-column: 1; grid-row: 1; }
@@ -508,7 +512,14 @@
        [:details (when error {:open true})
         [:summary "Post content (required for publishing) - consider an article abstract"]
         [:div.form-group
-         [:textarea {:name "post-content" :id "post-content"} (or post-content "")]]]])))
+         [:textarea {:name "post-content" :id "post-content"} (or post-content "")]]]]
+      [:div.symbol-palette
+       [:button {:type "button" :data-symbol "\u201C" :title "Opening double quote"} "\u201C"]
+       [:button {:type "button" :data-symbol "\u201D" :title "Closing double quote"} "\u201D"]
+       [:button {:type "button" :data-symbol "\u2018" :title "Opening single quote"} "\u2018"]
+       [:button {:type "button" :data-symbol "\u2019" :title "Closing single quote"} "\u2019"]
+       [:button {:type "button" :data-symbol "\u2014" :title "Em-dash"} "\u2014"]]
+      [:script (h/raw "(function(){var last=null;document.querySelectorAll('textarea').forEach(function(t){t.addEventListener('focus',function(){last=t;});});document.querySelectorAll('.symbol-palette button').forEach(function(b){b.addEventListener('mousedown',function(e){e.preventDefault();});b.addEventListener('click',function(){if(!last)return;var s=b.getAttribute('data-symbol');var start=last.selectionStart,end=last.selectionEnd,v=last.value;last.value=v.slice(0,start)+s+v.slice(end);last.selectionStart=last.selectionEnd=start+s.length;last.focus();});});})();")])))
 
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}
