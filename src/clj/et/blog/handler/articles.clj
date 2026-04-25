@@ -68,7 +68,7 @@
 (defn drafts-handler [req]
   (c/require-login req
     (fn [req]
-      (let [articles (db/list-draft-articles (c/ensure-ds))]
+      (let [articles (map c/resolve-preview-image (db/list-draft-articles (c/ensure-ds)))]
         (c/html-response 200
           (views/drafts-page {:articles articles :logged-in? true}))))))
 
