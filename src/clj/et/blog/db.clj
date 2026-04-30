@@ -454,7 +454,7 @@
                               :where [:in :ap.post_id post-ids]
                               :order-by [[:a.created_at :desc]]})
                  jdbc-opts)]
-      (into {} (map (fn [r] [(:post_id r) r]) rows)))))
+      (reduce (fn [m r] (if (contains? m (:post_id r)) m (assoc m (:post_id r) r))) {} rows))))
 
 (defn get-articles-post-content [ds article-ids]
   (if (empty? article-ids)
