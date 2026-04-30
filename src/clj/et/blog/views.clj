@@ -111,7 +111,7 @@
         .edit-actions { display: flex; gap: 0.75rem; flex-shrink: 0; }
         .version-nav { display: flex; align-items: center; gap: 0.5rem; }
         .version-line { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-        .version-line .version-badge { margin-left: 0; }
+        .version-line-right { margin-right: 16px; }
         a.version-badge, a.version-badge:visited { color: rgba(0,0,0,0.5); text-decoration: none; }
         a.version-badge:hover { color: #FD5353; text-decoration: none; }
         a.article-date, a.article-date:visited { color: rgba(0,0,0,0.4); text-decoration: none; }
