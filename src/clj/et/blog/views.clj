@@ -110,6 +110,11 @@
         .edit-heading h1 { margin: 0; }
         .edit-actions { display: flex; gap: 0.75rem; flex-shrink: 0; }
         .version-nav { display: flex; align-items: center; gap: 0.5rem; }
+        .version-line { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+        a.version-badge, a.version-badge:visited { color: rgba(0,0,0,0.5); text-decoration: none; }
+        a.version-badge:hover { color: #FD5353; text-decoration: none; }
+        a.article-date, a.article-date:visited { color: rgba(0,0,0,0.4); text-decoration: none; }
+        a.article-date:hover { color: #FD5353; text-decoration: none; }
         .version-arrow { text-decoration: none; color: rgba(0,0,0,0.4); font-size: 1.1rem; padding: 0 0.2rem; }
         .version-arrow:hover { color: #FD5353; text-decoration: none; }
         .version-arrow.disabled { color: rgba(0,0,0,0.15); cursor: default; }
@@ -254,10 +259,10 @@
      (if prev-v
        [:a.version-arrow {:href (str base-path eid "/as-of/" (:created_at prev-v))} "\u2190"]
        [:span.version-arrow.disabled "\u2190"])
-     [:span.article-date created_at]
      (if next-v
        [:a.version-arrow {:href (str base-path eid "/as-of/" (:created_at next-v))} "\u2192"]
-       [:span.version-arrow.disabled "\u2192"])]))
+       [:span.version-arrow.disabled "\u2192"])
+     [:a.article-date {:href (str base-path eid "/as-of/" created_at)} created_at]]))
 
 (defn- word-count [text]
   (if (str/blank? text) 0
@@ -309,27 +314,30 @@
        (when (and subtitle (not= subtitle ""))
          [:p.subtitle subtitle])
        (when (or logged-in? (not= article_id 36))
-         (list
-           [:p.word-count (str (word-count content) " words")]
-           (if (> (count versions) 1)
-             (version-nav "/article/" :article_id article (or current-version created_at) versions)
-             [:div.version-nav [:span.article-date created_at]])
-           (let [pub-versions (->> versions (map :version) (filter pos?) distinct sort vec)]
-             (if (and version (pos? version) (> (count pub-versions) 1))
-               (let [idx (.indexOf pub-versions version)
-                     prev-ver (when (pos? idx) (nth pub-versions (dec idx)))
-                     next-ver (when (< idx (dec (count pub-versions))) (nth pub-versions (inc idx)))]
-                 [:div.version-nav
-                  (if prev-ver
-                    [:a.version-arrow {:href (str "/article/" article_id "/version/" prev-ver)} "\u2190"]
-                    [:span.version-arrow.disabled "\u2190"])
-                  [:span.version-badge (str "v" version)]
-                  (if next-ver
-                    [:a.version-arrow {:href (str "/article/" article_id "/version/" next-ver)} "\u2192"]
-                    [:span.version-arrow.disabled "\u2192"])])
-               (if (and version (pos? version))
-                 [:span.version-badge (str "v" version)]
-                 (when logged-in? [:span.version-badge.draft "draft"]))))))
+         (let [pub-versions (->> versions (map :version) (filter pos?) distinct sort vec)
+               version-side (if (and version (pos? version) (> (count pub-versions) 1))
+                              (let [idx (.indexOf pub-versions version)
+                                    prev-ver (when (pos? idx) (nth pub-versions (dec idx)))
+                                    next-ver (when (< idx (dec (count pub-versions))) (nth pub-versions (inc idx)))]
+                                [:div.version-nav
+                                 [:a.version-badge {:href (str "/article/" article_id "/version/" version)} (str "v" version)]
+                                 (if prev-ver
+                                   [:a.version-arrow {:href (str "/article/" article_id "/version/" prev-ver)} "\u2190"]
+                                   [:span.version-arrow.disabled "\u2190"])
+                                 (if next-ver
+                                   [:a.version-arrow {:href (str "/article/" article_id "/version/" next-ver)} "\u2192"]
+                                   [:span.version-arrow.disabled "\u2192"])])
+                              (if (and version (pos? version))
+                                [:a.version-badge {:href (str "/article/" article_id "/version/" version)} (str "v" version)]
+                                (when logged-in? [:span.version-badge.draft "draft"])))
+               time-side (if (> (count versions) 1)
+                           (version-nav "/article/" :article_id article (or current-version created_at) versions)
+                           [:div.version-nav [:span.article-date created_at]])]
+           (list
+             [:p.word-count (str (word-count content) " words")]
+             [:div.version-line
+              [:div.version-line-left version-side]
+              [:div.version-line-right time-side]])))
        (when logged-in?
          [:span " " [:a.btn.btn-small {:href (str "/article/" article_id "/edit")} "Edit"]])
        (when rendered-preamble

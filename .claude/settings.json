@@ -3,7 +3,8 @@
     "allow": [
       "Bash(clojure -M:test)",
       "Bash(make test)",
-      "Bash(make restart)"
+      "Bash(make restart)",
+      "Read(//var/folders/**/NSIRD_screencaptureui_*/**)"
     ]
   },
   "enableAllProjectMcpServers": true,
