@@ -7,11 +7,9 @@
 (deftest submit-comment-on-article
   (let [app (t/make-app)
         token (t/login app)
-        create-resp (t/POST app "/article"
-                      (t/article-params {"title" "Commentable" "content" "Discuss me"
-                                         "publish" "1" "post-content" "Published post"})
-                      token)
-        article-id (str/replace (t/redirect-location create-resp) "/article/" "")]
+        article-id (t/create-and-publish! app token
+                     {"title" "Commentable" "content" "Discuss me"}
+                     "Published post")]
     (testing "comment form is accessible"
       (let [resp (t/GET app (str "/article/" article-id "/version/1/comment"))]
         (is (= 200 (:status resp)))
@@ -32,10 +30,8 @@
 (deftest comment-with-missing-fields-rejected
   (let [app (t/make-app)
         token (t/login app)
-        _ (t/POST app "/article"
-            (t/article-params {"title" "For Comment" "content" "Body"
-                               "publish" "1" "post-content" "Post"})
-            token)
+        _ (t/create-and-publish! app token
+            {"title" "For Comment" "content" "Body"} "Post")
         resp (t/POST app "/article/1/version/1/comment"
                {"email" "" "display-name" "" "body" ""})]
     (is (= 400 (:status resp)))))
@@ -43,10 +39,8 @@
 (deftest comment-has-own-page
   (let [app (t/make-app)
         token (t/login app)
-        _ (t/POST app "/article"
-            (t/article-params {"title" "My Article" "content" "Content"
-                               "publish" "1" "post-content" "Post"})
-            token)
+        _ (t/create-and-publish! app token
+            {"title" "My Article" "content" "Content"} "Post")
         _ (t/POST app "/article/1/version/1/comment"
             {"email" "a@b.com" "display-name" "Alice" "body" "Nice work!"})]
     (testing "comment page renders with # before title"
@@ -65,9 +59,12 @@
 (deftest article-comments-list
   (let [app (t/make-app)
         token (t/login app)
-        _ (t/POST app "/article"
-            (t/article-params {"title" "Versioned" "content" "V1"
-                               "publish" "1" "post-content" "Post v1"})
+        _ (t/create-and-publish! app token
+            {"title" "Versioned" "content" "V1"} "Post v1")
+        _ (Thread/sleep 1100)
+        _ (t/POST app "/article/1"
+            (t/article-params {"title" "Versioned" "content" "V2"
+                               "save-version" "1"})
             token)
         _ (Thread/sleep 1100)
         _ (t/POST app "/article/1"
@@ -98,9 +95,12 @@
 (deftest comment-on-older-version
   (let [app (t/make-app)
         token (t/login app)
-        _ (t/POST app "/article"
-            (t/article-params {"title" "Multi" "content" "V1"
-                               "publish" "1" "post-content" "Post"})
+        _ (t/create-and-publish! app token
+            {"title" "Multi" "content" "V1"} "Post")
+        _ (Thread/sleep 1100)
+        _ (t/POST app "/article/1"
+            (t/article-params {"title" "Multi" "content" "V2"
+                               "save-version" "1"})
             token)
         _ (Thread/sleep 1100)
         _ (t/POST app "/article/1"

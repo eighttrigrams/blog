@@ -36,13 +36,10 @@
 (deftest create-published-article
   (let [app (t/make-app)
         token (t/login app)
-        resp (t/POST app "/article"
-               (t/article-params {"title" "Published Article" "content" "Article body here"
-                                  "subtitle" "A subtitle"
-                                  "publish" "1" "post-content" "Post announcement text"})
-               token)
-        article-id (str/replace (t/redirect-location resp) "/article/" "")]
-    (is (= 302 (:status resp)))
+        article-id (t/create-and-publish! app token
+                     {"title" "Published Article" "content" "Article body here"
+                      "subtitle" "A subtitle"}
+                     "Post announcement text")]
     (testing "published article appears on public home page"
       (let [home (t/GET app "/articles")
             html (t/parse home)
@@ -85,11 +82,9 @@
 (deftest delete-article
   (let [app (t/make-app)
         token (t/login app)
-        create-resp (t/POST app "/article"
-                      (t/article-params {"title" "To Delete" "content" "Will be gone"
-                                         "publish" "1" "post-content" "Bye"})
-                      token)
-        article-id (str/replace (t/redirect-location create-resp) "/article/" "")]
+        article-id (t/create-and-publish! app token
+                     {"title" "To Delete" "content" "Will be gone"}
+                     "Bye")]
     (testing "article exists before deletion"
       (is (= 200 (:status (t/GET app (str "/article/" article-id))))))
     (t/POST app (str "/article/" article-id "/delete") {} token)
@@ -104,19 +99,18 @@
 (deftest article-versioning
   (let [app (t/make-app)
         token (t/login app)]
-    (t/POST app "/article"
-      (t/article-params {"title" "Versioned" "content" "v0 content"})
-      token)
+    (t/create-and-publish! app token
+      {"title" "Versioned" "content" "v1 content"} "Announcement")
     (testing "first publish creates version 1"
-      (Thread/sleep 1100)
-      (t/POST app "/article/1"
-        (t/article-params {"title" "Versioned" "content" "v1 content"
-                           "publish" "1" "post-content" "Announcement"})
-        token)
       (let [resp (t/GET app "/article/1/version/1")]
         (is (= 200 (:status resp)))
         (is (str/includes? (:body resp) "v1 content"))))
-    (testing "second publish creates version 2"
+    (testing "save-version + publish creates version 2 and announces it"
+      (Thread/sleep 1100)
+      (t/POST app "/article/1"
+        (t/article-params {"title" "Versioned" "content" "v2 content"
+                           "save-version" "1"})
+        token)
       (Thread/sleep 1100)
       (t/POST app "/article/1"
         (t/article-params {"title" "Versioned" "content" "v2 content"
@@ -137,27 +131,30 @@
 
 (deftest publish-without-post-content-rejected
   (let [app (t/make-app)
-        token (t/login app)
-        resp (t/POST app "/article"
-               (t/article-params {"title" "No Post" "content" "Body"
-                                  "publish" "1" "post-content" ""})
-               token)]
-    (is (= 400 (:status resp)))
-    (is (str/includes? (:body resp) "Post content is required"))))
+        token (t/login app)]
+    (t/POST app "/article"
+      (t/article-params {"title" "No Post" "content" "Body"})
+      token)
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "No Post" "content" "Body" "save-version" "1"})
+      token)
+    (let [resp (t/POST app "/article/1"
+                 (t/article-params {"title" "No Post" "content" "Body"
+                                    "publish" "1" "post-content" ""})
+                 token)]
+      (is (= 400 (:status resp)))
+      (is (str/includes? (:body resp) "Post content is required")))))
 
 (deftest topic-filtering
   (let [app (t/make-app)
         token (t/login app)]
-    (t/POST app "/article"
-      (t/article-params {"title" "Software Post" "content" "About code"
-                         "topics" "swe"
-                         "publish" "1" "post-content" "SWE post"})
-      token)
-    (t/POST app "/article"
-      (t/article-params {"title" "Thinking Post" "content" "About ideas"
-                         "topics" "thoughts"
-                         "publish" "1" "post-content" "Thoughts post"})
-      token)
+    (t/create-and-publish! app token
+      {"title" "Software Post" "content" "About code" "topics" "swe"}
+      "SWE post")
+    (t/create-and-publish! app token
+      {"title" "Thinking Post" "content" "About ideas" "topics" "thoughts"}
+      "Thoughts post")
     (testing "no filter shows all articles"
       (let [resp (t/GET app "/articles")]
         (is (str/includes? (:body resp) "Software Post"))
@@ -173,6 +170,172 @@
       (let [resp (t/GET app "/articles?topic=nope")]
         (is (not (str/includes? (:body resp) "Software Post")))
         (is (not (str/includes? (:body resp) "Thinking Post")))))))
+
+(deftest save-new-version-bumps-version
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "Versioned" "content" "v1 content"}
+      "Announcement")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "Versioned" "content" "v2 content"
+                         "save-version" "1"})
+      token)
+    (testing "save-version creates a new version row"
+      (let [resp (t/GET app "/article/1/version/2")]
+        (is (= 200 (:status resp)))
+        (is (str/includes? (:body resp) "v2 content"))))
+    (testing "save-version does not create an announcement post"
+      (let [resp (t/GET app "/posts")]
+        (is (= 1 (count (t/select-all (t/parse resp)
+                          (hs/descendant (hs/class "post-list") (hs/tag :li))))))))))
+
+(deftest cannot-bump-version-when-current-not-published
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "T" "content" "v1"} "Announce v1")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "T" "content" "v2 content" "save-version" "1"})
+      token)
+    (testing "edit page hides Save new version while v2 is unpublished"
+      (let [resp (t/GET app "/article/1/edit" token)]
+        (is (= 200 (:status resp)))
+        (is (not (str/includes? (:body resp) "Save new version")))
+        (is (str/includes? (:body resp) ">Publish<"))))
+    (testing "server rejects another save-version"
+      (let [resp (t/POST app "/article/1"
+                   (t/article-params {"title" "T" "content" "v3 content" "save-version" "1"})
+                   token)]
+        (is (= 400 (:status resp)))
+        (is (str/includes? (:body resp) "Publish the current version"))))))
+
+(deftest publish-validation-error-keeps-publish-button
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/POST app "/article"
+      (t/article-params {"title" "T" "content" ""})
+      token)
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "T" "content" "v1" "save-version" "1"})
+      token)
+    (let [resp (t/POST app "/article/1"
+                 (t/article-params {"title" "T" "content" "v1"
+                                    "publish" "1" "post-content" ""})
+                 token)]
+      (is (= 400 (:status resp)))
+      (is (str/includes? (:body resp) "Post content is required"))
+      (testing "Publish button remains visible after validation error"
+        (is (str/includes? (:body resp) ">Publish<"))))))
+
+(deftest cannot-publish-same-version-twice
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "T" "content" "v1"} "Announce v1")
+    (testing "edit page hides Publish button on already-published version"
+      (let [resp (t/GET app "/article/1/edit" token)]
+        (is (= 200 (:status resp)))
+        (is (not (str/includes? (:body resp) ">Publish<")))
+        (is (str/includes? (:body resp) "Save new version"))))
+    (testing "server rejects a second publish on the same version"
+      (let [resp (t/POST app "/article/1"
+                   (t/article-params {"title" "T" "content" "v1"
+                                      "publish" "1" "post-content" "again"})
+                   token)]
+        (is (= 400 (:status resp)))
+        (is (str/includes? (:body resp) "already been published"))))))
+
+(deftest publish-does-not-bump-version
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "T" "content" "v1"} "Announce")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "T" "content" "v1 edited"
+                         "save-version" "1"})
+      token)
+    (testing "republishing does not bump beyond the user-controlled version"
+      (is (= 200 (:status (t/GET app "/article/1/version/2"))))
+      (is (= 404 (:status (t/GET app "/article/1/version/3")))))))
+
+(deftest save-new-version-noop-when-unchanged
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "Same" "content" "same content"} "Announcement")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "Same" "content" "same content"
+                         "save-version" "1"})
+      token)
+    (testing "no v2 created when content is unchanged"
+      (is (= 404 (:status (t/GET app "/article/1/version/2")))))
+    (testing "v1 still latest"
+      (let [resp (t/GET app "/article/1")]
+        (is (str/includes? (:body resp) "v1"))
+        (is (not (str/includes? (:body resp) "v2")))))))
+
+(deftest drafts-page-shows-preview-image
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/POST app "/article"
+      (t/article-params {"title" "Draft With Image" "content" "Body"
+                         "preview-image" "blog-images/1/cover.png"})
+      token)
+    (let [resp (t/GET app "/article/drafts" token)
+          html (t/parse resp)
+          imgs (t/select-all html (hs/class "article-preview"))]
+      (is (= 200 (:status resp)))
+      (is (= 1 (count imgs)))
+      (is (str/includes? (or (get-in (first imgs) [:attrs :src]) "")
+                         "blog-images/1/cover.png")))))
+
+(deftest articles-feed-has-one-entry-per-version
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "Feed Article" "content" "v1"} "Announce v1")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "Feed Article" "content" "v1 edited"})
+      token)
+    (let [resp (t/GET app "/feed/articles.xml")
+          body (:body resp)]
+      (is (= 200 (:status resp)))
+      (testing "in-version saves do not multiply feed entries"
+        (is (= 1 (count (re-seq #"<entry>" body)))))
+      (testing "feed reflects the latest in-version content"
+        (is (str/includes? body "/article/1/version/1"))))))
+
+(deftest articles-feed-only-includes-published-versions
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "Feed Article" "content" "v1"} "Announce v1")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "Feed Article" "content" "v2 content"
+                         "save-version" "1"})
+      token)
+    (let [body (:body (t/GET app "/feed/articles.xml"))]
+      (testing "v2 (bumped but not published) is not in the feed"
+        (is (= 1 (count (re-seq #"<entry>" body))))
+        (is (str/includes? body "/article/1/version/1"))
+        (is (not (str/includes? body "/article/1/version/2")))))
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "Feed Article" "content" "v2 content"
+                         "publish" "1" "post-content" "Announce v2"})
+      token)
+    (let [body (:body (t/GET app "/feed/articles.xml"))]
+      (testing "after publishing v2, both versions appear"
+        (is (= 2 (count (re-seq #"<entry>" body))))
+        (is (str/includes? body "/article/1/version/2"))))))
 
 (deftest nonexistent-article-returns-404
   (let [app (t/make-app)

@@ -4,3 +4,4 @@ data/
 .cpcache/
 .backups/
 .env
+.claude/settings.local.json

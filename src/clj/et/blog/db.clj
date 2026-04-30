@@ -32,10 +32,9 @@
                  jdbc-opts)]
     (inc (first (vals result)))))
 
-(defn create-article! [ds {:keys [title subtitle content footnotes addenda preamble preview-image abstract topics publish? post-content]}]
+(defn create-article! [ds {:keys [title subtitle content footnotes addenda preamble preview-image abstract topics]}]
   (let [conn (get-conn ds)
-        article-id (next-article-id ds)
-        version (if publish? 1 0)]
+        article-id (next-article-id ds)]
     (jdbc/execute-one! conn
       (sql/format {:insert-into :articles
                    :values [{:article_id article-id
@@ -45,7 +44,7 @@
                              :footnotes (or footnotes "")
                              :addenda (or addenda "")
                              :preamble (or preamble "")
-                             :version version}]})
+                             :version 0}]})
       jdbc-opts)
     (jdbc/execute-one! conn
       (sql/format {:insert-into :article_meta
@@ -54,26 +53,6 @@
                              :abstract (or abstract "")
                              :topics (or topics "")}]})
       jdbc-opts)
-    (when (and publish? post-content)
-      (let [post-id (next-post-id ds)
-            post-image (or preview-image "")]
-        (jdbc/execute-one! conn
-          (sql/format {:insert-into :posts
-                       :values [{:post_id post-id
-                                 :content post-content
-                                 :footnotes ""
-                                 :image post-image}]})
-          jdbc-opts)
-        (jdbc/execute-one! conn
-          (sql/format {:insert-into :post_meta
-                       :values [{:post_id post-id}]})
-          jdbc-opts)
-        (jdbc/execute-one! conn
-          (sql/format {:insert-into :article_posts
-                       :values [{:article_id article-id
-                                 :article_version version
-                                 :post_id post-id}]})
-          jdbc-opts)))
     article-id))
 
 (defn- current-version [ds article-id]
@@ -87,7 +66,7 @@
                  jdbc-opts)]
     (or (:version result) 0)))
 
-(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda preamble preview-image abstract topics publish? post-content]}]
+(defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda preamble preview-image abstract topics publish? bump-version? post-content]}]
   (let [conn (get-conn ds)
         current (jdbc/execute-one! conn
                   (sql/format {:select [:title :subtitle :content :footnotes :addenda :preamble]
@@ -97,14 +76,16 @@
                                :limit 1})
                   jdbc-opts)
         cur (current-version ds article-id)
-        version (if publish? (inc cur) cur)
         article-changed? (or (not= title (:title current))
                              (not= (or subtitle "") (or (:subtitle current) ""))
                              (not= content (:content current))
                              (not= (or footnotes "") (or (:footnotes current) ""))
                              (not= (or addenda "") (or (:addenda current) ""))
                              (not= (or preamble "") (or (:preamble current) "")))
-        need-new-row? (or publish? article-changed?)]
+        bump? (or (and publish? (zero? cur))
+                  (and bump-version? article-changed?))
+        version (if bump? (inc cur) cur)
+        need-new-row? (or bump? article-changed?)]
     (when need-new-row?
       (jdbc/execute-one! conn
         (sql/format {:insert-into :articles
@@ -205,8 +186,14 @@
     (jdbc/execute! conn
       ["SELECT a.article_id, a.title, a.subtitle, a.content, a.footnotes, a.addenda, a.preamble, a.created_at, a.version, am.preview_image, am.abstract, am.topics
         FROM articles a
+        INNER JOIN (
+          SELECT article_id, version, MAX(created_at) AS max_created_at
+          FROM articles
+          WHERE version > 0
+          GROUP BY article_id, version
+        ) latest ON a.article_id = latest.article_id AND a.version = latest.version AND a.created_at = latest.max_created_at
         INNER JOIN article_meta am ON am.article_id = a.article_id AND am.deleted = 0
-        WHERE a.version > 0
+        INNER JOIN article_posts ap ON ap.article_id = a.article_id AND ap.article_version = a.version
         ORDER BY a.created_at DESC"]
       jdbc-opts)))
 
@@ -411,6 +398,17 @@
         INNER JOIN article_posts ap ON ap.post_id = p.post_id
         ORDER BY latest.first_at DESC"]
       jdbc-opts)))
+
+(defn version-published? [ds article-id version]
+  (let [conn (get-conn ds)
+        result (jdbc/execute-one! conn
+                 (sql/format {:select [[[:count :*] :n]]
+                              :from [:article_posts]
+                              :where [:and
+                                      [:= :article_id article-id]
+                                      [:= :article_version version]]})
+                 jdbc-opts)]
+    (pos? (or (:n result) 0))))
 
 (defn get-post-article-link [ds post-id]
   (let [conn (get-conn ds)]

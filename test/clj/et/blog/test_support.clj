@@ -70,3 +70,18 @@
 
 (defn article-params [overrides]
   (merge article-defaults overrides))
+
+(defn create-and-publish! [app token overrides post-content]
+  (let [create-resp (POST app "/article"
+                      (article-params (assoc overrides "content" ""))
+                      token)
+        article-id (str/replace (get-in create-resp [:headers "Location"]) "/article/" "")]
+    (Thread/sleep 1100)
+    (POST app (str "/article/" article-id)
+      (article-params (merge overrides {"save-version" "1"}))
+      token)
+    (Thread/sleep 1100)
+    (POST app (str "/article/" article-id)
+      (article-params (merge overrides {"publish" "1" "post-content" post-content}))
+      token)
+    article-id))

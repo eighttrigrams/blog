@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(clojure -M:test)",
+      "Bash(make test)",
+      "Bash(make restart)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "playwright"
+  ]
+}

@@ -4,6 +4,20 @@
             [hickory.select :as hs]
             [et.blog.test-support :as t]))
 
+(deftest announcement-post-shows-latest-title-for-version
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "Original Title" "content" "Body"} "Announcement")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "Updated Title" "content" "Body"})
+      token)
+    (testing "posts list reflects the latest title for the announced version"
+      (let [resp (t/GET app "/posts")]
+        (is (str/includes? (:body resp) "Updated Title"))
+        (is (not (str/includes? (:body resp) "Original Title")))))))
+
 (deftest create-and-view-post
   (let [app (t/make-app)
         token (t/login app)

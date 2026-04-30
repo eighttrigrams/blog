@@ -471,7 +471,7 @@
       [:input {:type "password" :name "password" :id "password" :autofocus true}]]
      [:button.btn {:type "submit"} "Login"]]))
 
-(defn edit-page [{:keys [article logged-in? new? error post-content]}]
+(defn edit-page [{:keys [article logged-in? new? error post-content version-published?]}]
   (let [action (if new? "/article" (str "/article/" (:article_id article)))]
     (layout {:title (if new? "New Article" "Edit Article") :logged-in? logged-in?}
       (when error
@@ -481,7 +481,15 @@
         [:h1 (if new? "New Article" "Edit Article")]
         [:div.edit-actions
          [:button.btn {:type "submit"} "Save"]
-         [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"} "Publish"]
+         (when (and (not new?)
+                    (or (zero? (or (:version article) 0)) version-published?))
+           [:button.btn.btn-publish {:type "submit" :name "save-version" :value "1"
+                                     :onclick "return confirm('Save as a new version?');"}
+            "Save new version"])
+         (when (and (not new?)
+                    (pos? (or (:version article) 0))
+                    (not version-published?))
+           [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"} "Publish"])
          (when-not new?
            [:a.btn.btn-small.btn-danger {:href (str "/article/" (:article_id article) "/delete")} "Delete"])]]
        [:div.form-group
@@ -511,10 +519,13 @@
        [:div.form-group
         [:label {:for "addenda"} "Addenda"]
         [:textarea {:name "addenda" :id "addenda"} (or (:addenda article) "")]]
-       [:details (when error {:open true})
-        [:summary "Post content (required for publishing) - consider an article abstract"]
-        [:div.form-group
-         [:textarea {:name "post-content" :id "post-content"} (or post-content "")]]]]
+       (when (and (not new?)
+                  (pos? (or (:version article) 0))
+                  (not version-published?))
+         [:details (when error {:open true})
+          [:summary "Post content (required for publishing) - consider an article abstract"]
+          [:div.form-group
+           [:textarea {:name "post-content" :id "post-content"} (or post-content "")]]])]
       [:div.symbol-palette
        [:button {:type "button" :data-symbol "\u201C" :title "Opening double quote"} "\u201C"]
        [:button {:type "button" :data-symbol "\u201D" :title "Closing double quote"} "\u201D"]
