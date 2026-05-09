@@ -1,3 +1,0 @@
-{:db {:type :sqlite-file
-      :path "/app/data/blog.db"}
- :image-base-url "https://daniel-de-oliveira.com"}
