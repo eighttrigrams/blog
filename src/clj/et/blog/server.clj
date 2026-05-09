@@ -88,6 +88,17 @@
     (tel/log! :info (str "Binding to " host ":" port))
     (jetty/run-jetty (app (c/prod-mode?)) {:port port :host host :join? false})))
 
+(defn build-handler
+  "Initialise blog (config, datasource, image base url) and return a ring handler.
+   Does not start jetty or nrepl. The caller owns the server lifecycle.
+   Intended for use by composing apps (e.g. plurama)."
+  [config]
+  (reset! c/*config config)
+  (when-let [base-url (:image-base-url config)]
+    (render/set-image-base-url! base-url))
+  (c/ensure-ds)
+  (app (c/prod-mode?)))
+
 (defn -main [& _args]
   (reset! c/*config (c/load-config))
   (let [prod? (c/prod-mode?)]
