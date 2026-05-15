@@ -594,7 +594,8 @@
        (if (and logged-in? (> (count versions) 1))
          (version-nav "/post/" :post_id post (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
-       (when (and logged-in? (nil? published_at))
+       (when (and logged-in? (nil? published_at) first-published-at
+                  (neg? (compare created_at first-published-at)))
          [:span.version-badge.draft "PRE-PUBLISHED"])
        (when logged-in?
          [:span [:a.btn.btn-small {:href (str "/post/" post_id "/edit")} "Edit"]])
@@ -613,7 +614,7 @@
            (when-let [sub (not-empty (:subtitle article-link))]
              [:p.subtitle sub])))])))
 
-(defn edit-post-page [{:keys [post logged-in? new?]}]
+(defn edit-post-page [{:keys [post logged-in? new? has-published?]}]
   (let [action (if new? "/posts" (str "/post/" (:post_id post)))]
     (layout {:title (if new? "New Post" "Edit Post") :logged-in? logged-in?}
       [:form {:method "POST" :action action}
@@ -621,9 +622,10 @@
         [:h1 (if new? "New Post" "Edit Post")]
         [:div.edit-actions
          [:button.btn {:type "submit"} "Save"]
-         [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"
-                                   :onclick "return confirm('Publish this post?');"}
-          "Publish"]
+         (when-not has-published?
+           [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"
+                                     :onclick "return confirm('Publish this post?');"}
+            "Publish"])
          (when-not new?
            [:a.btn.btn-small.btn-danger {:href (str "/post/" (:post_id post) "/delete")} "Delete"])]]
        [:div.form-group

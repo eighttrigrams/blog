@@ -75,10 +75,12 @@
   (c/require-login req
     (fn [req]
       (let [id (Integer/parseInt (get-in req [:params :id]))
-            post (db/get-post (c/ensure-ds) id {})]
+            post (db/get-post (c/ensure-ds) id {})
+            stats (db/get-post-publish-stats (c/ensure-ds) id)]
         (if post
           (c/html-response 200
-            (views/edit-post-page {:post post :logged-in? true}))
+            (views/edit-post-page {:post post :logged-in? true
+                                   :has-published? (pos? (or (:published_count stats) 0))}))
           (c/html-response 404
             (views/not-found-page {:logged-in? true})))))))
 
