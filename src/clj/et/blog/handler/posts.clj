@@ -10,7 +10,9 @@
 (defn posts-handler [req]
   (let [auth? (c/logged-in? req)
         fetch-fn (fn [aid as-of] (db/get-article-version (c/ensure-ds) aid as-of {}))
-        posts (db/list-posts (c/ensure-ds))
+        posts (if auth?
+                (db/list-posts (c/ensure-ds))
+                (db/list-posts-published (c/ensure-ds)))
         post-ids (mapv :post_id posts)
         article-links (db/get-posts-article-links (c/ensure-ds) post-ids)
         posts (->> posts
@@ -29,9 +31,10 @@
   (let [auth? (c/logged-in? req)
         id (Integer/parseInt (get-in req [:params :id]))
         as-of (get-in req [:params :as-of])
-        post (if as-of
-               (db/get-post-version (c/ensure-ds) id as-of {})
-               (db/get-post (c/ensure-ds) id {}))]
+        opts {:published-only? (not auth?)}
+        post (cond
+               (and as-of auth?) (db/get-post-version (c/ensure-ds) id as-of opts)
+               :else (db/get-post (c/ensure-ds) id opts))]
     (if post
       (let [versions (if auth? (db/get-post-versions (c/ensure-ds) id {}) [post])
             fetch-fn (fn [aid as-of] (db/get-article-version (c/ensure-ds) aid as-of {}))
@@ -58,7 +61,10 @@
       (let [content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             image (or (get-in req [:form-params "image"]) "")
+            publish? (some? (get-in req [:form-params "publish"]))
             post-id (db/create-post! (c/ensure-ds) {:content content :footnotes footnotes :image image})]
+        (when publish?
+          (db/publish-post! (c/ensure-ds) post-id {:content content :footnotes footnotes :image image}))
         (c/redirect (str "/post/" post-id))))))
 
 (defn edit-post-handler [req]
@@ -78,8 +84,11 @@
       (let [id (Integer/parseInt (get-in req [:params :id]))
             content (or (get-in req [:form-params "content"]) "")
             footnotes (or (get-in req [:form-params "footnotes"]) "")
-            image (or (get-in req [:form-params "image"]) "")]
-        (db/update-post! (c/ensure-ds) id {:content content :footnotes footnotes :image image})
+            image (or (get-in req [:form-params "image"]) "")
+            publish? (some? (get-in req [:form-params "publish"]))]
+        (if publish?
+          (db/publish-post! (c/ensure-ds) id {:content content :footnotes footnotes :image image})
+          (db/update-post! (c/ensure-ds) id {:content content :footnotes footnotes :image image}))
         (c/redirect (str "/post/" id))))))
 
 (defn confirm-delete-post-handler [req]

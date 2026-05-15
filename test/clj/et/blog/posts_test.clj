@@ -22,7 +22,7 @@
   (let [app (t/make-app)
         token (t/login app)
         resp (t/POST app "/posts"
-               {"content" "Hello from a post" "footnotes" "" "image" ""}
+               {"content" "Hello from a post" "footnotes" "" "image" "" "publish" "1"}
                token)
         post-path (t/redirect-location resp)]
     (is (= 302 (:status resp)))
@@ -41,7 +41,7 @@
   (let [app (t/make-app)
         token (t/login app)
         _ (t/POST app "/posts"
-            {"content" "Above the fold\n----\nBelow the fold" "footnotes" "" "image" ""}
+            {"content" "Above the fold\n----\nBelow the fold" "footnotes" "" "image" "" "publish" "1"}
             token)
         resp (t/GET app "/posts")
         html (t/parse resp)]
@@ -63,7 +63,7 @@
   (let [app (t/make-app)
         token (t/login app)
         _ (t/POST app "/posts"
-            {"content" "Just a normal post" "footnotes" "" "image" ""}
+            {"content" "Just a normal post" "footnotes" "" "image" "" "publish" "1"}
             token)
         resp (t/GET app "/posts")
         html (t/parse resp)]
@@ -74,7 +74,7 @@
   (let [app (t/make-app)
         token (t/login app)
         _ (t/POST app "/posts"
-            {"content" "Post with image" "footnotes" "" "image" "blog-images/test.jpg"}
+            {"content" "Post with image" "footnotes" "" "image" "blog-images/test.jpg" "publish" "1"}
             token)]
     (testing "posts list shows image"
       (let [resp (t/GET app "/posts")
@@ -90,7 +90,7 @@
 (deftest delete-post
   (let [app (t/make-app)
         token (t/login app)
-        resp (t/POST app "/posts" {"content" "Ephemeral post" "footnotes" "" "image" ""} token)
+        resp (t/POST app "/posts" {"content" "Ephemeral post" "footnotes" "" "image" "" "publish" "1"} token)
         post-id (str/replace (t/redirect-location resp) "/post/" "")]
     (is (= 200 (:status (t/GET app (str "/post/" post-id)))))
     (t/POST app (str "/post/" post-id "/delete") {} token)

@@ -550,10 +550,12 @@
       [:p [:a.action-link {:href "/post/new"} "New Post"]])
     (if (seq posts)
       [:ul.post-list
-       (for [{:keys [post_id created_at first_at above-html below-html truncated? article-link resolved-image]} posts]
+       (for [{:keys [post_id created_at first_at above-html below-html truncated? article-link resolved-image has_published]} posts]
          [:li
           [:div.post-heading
-           [:h2 [:a.post-permalink {:href (str "/post/" post_id)} "#"] " " (human-date (or first_at created_at))]
+           [:h2 [:a.post-permalink {:href (str "/post/" post_id)} "#"] " " (human-date (or first_at created_at))
+            (when (and logged-in? (some? has_published) (zero? has_published))
+              [:span.version-badge.draft "draft"])]
            (when logged-in?
              [:a.btn.btn-small {:href (str "/post/" post_id "/edit")} "Edit"])]
           [:div.article-content
@@ -578,12 +580,14 @@
       [:p "No posts yet."])))
 
 (defn post-page [{:keys [post versions logged-in? current-version rendered-content article-link resolved-image]}]
-  (let [{:keys [post_id created_at]} post]
+  (let [{:keys [post_id created_at published_at]} post]
     (layout {:title "Post" :logged-in? logged-in?}
       [:article
        (if (and logged-in? (> (count versions) 1))
          (version-nav "/post/" :post_id post (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
+       (when (and logged-in? (nil? published_at))
+         [:span.version-badge.draft "PRE-PUBLISHED"])
        (when logged-in?
          [:span [:a.btn.btn-small {:href (str "/post/" post_id "/edit")} "Edit"]])
        [:div.article-content (h/raw rendered-content)]
@@ -609,6 +613,9 @@
         [:h1 (if new? "New Post" "Edit Post")]
         [:div.edit-actions
          [:button.btn {:type "submit"} "Save"]
+         [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"
+                                   :onclick "return confirm('Publish this post?');"}
+          "Publish"]
          (when-not new?
            [:a.btn.btn-small.btn-danger {:href (str "/post/" (:post_id post) "/delete")} "Delete"])]]
        [:div.form-group

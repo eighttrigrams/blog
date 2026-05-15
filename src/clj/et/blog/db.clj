@@ -120,7 +120,8 @@
                        :values [{:post_id post-id
                                  :content post-content
                                  :footnotes ""
-                                 :image post-image}]})
+                                 :image post-image
+                                 :published_at [:raw "datetime('now')"]}]})
           jdbc-opts)
         (jdbc/execute-one! conn
           (sql/format {:insert-into :post_meta
@@ -266,7 +267,7 @@
 
 ;; --- Posts ---
 
-(def ^:private post-cols [:post_id :content :footnotes :image :created_at])
+(def ^:private post-cols [:post_id :content :footnotes :image :created_at :published_at])
 
 (defn next-post-id [ds]
   (let [conn (get-conn ds)
@@ -305,15 +306,41 @@
 (defn list-posts [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, latest.first_at
+      ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, p.published_at,
+               latest.first_at,
+               CASE WHEN pub.post_id IS NULL THEN 0 ELSE 1 END AS has_published
         FROM posts p
         INNER JOIN (
           SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
           FROM posts
           GROUP BY post_id
         ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
+        LEFT JOIN (
+          SELECT post_id FROM posts WHERE published_at IS NOT NULL GROUP BY post_id
+        ) pub ON pub.post_id = p.post_id
         INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 0
-        ORDER BY latest.first_at DESC"]
+        ORDER BY has_published ASC, latest.first_at DESC"]
+      jdbc-opts)))
+
+(defn list-posts-published [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, p.published_at,
+               firsts.first_at
+        FROM posts p
+        INNER JOIN (
+          SELECT post_id, MAX(created_at) AS max_published_at
+          FROM posts
+          WHERE published_at IS NOT NULL
+          GROUP BY post_id
+        ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_published_at
+        INNER JOIN (
+          SELECT post_id, MIN(created_at) AS first_at
+          FROM posts
+          GROUP BY post_id
+        ) firsts ON firsts.post_id = p.post_id
+        INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 0
+        ORDER BY firsts.first_at DESC"]
       jdbc-opts)))
 
 (defn list-deleted-posts [ds]
@@ -330,10 +357,11 @@
         ORDER BY latest.first_at DESC"]
       jdbc-opts)))
 
-(defn get-post [ds post-id {:keys [include-deleted?]}]
+(defn get-post [ds post-id {:keys [include-deleted? published-only?]}]
   (let [conn (get-conn ds)
         base [:and [:= :p.post_id post-id]]
-        base (if include-deleted? base (conj base [:= :pm.deleted 0]))]
+        base (if include-deleted? base (conj base [:= :pm.deleted 0]))
+        base (if published-only? (conj base [:raw "p.published_at IS NOT NULL"]) base)]
     (jdbc/execute-one! conn
       (sql/format {:select (mapv #(keyword (str "p." (name %))) post-cols)
                    :from [[:posts :p]]
@@ -343,10 +371,11 @@
                    :limit 1})
       jdbc-opts)))
 
-(defn get-post-version [ds post-id as-of {:keys [include-deleted?]}]
+(defn get-post-version [ds post-id as-of {:keys [include-deleted? published-only?]}]
   (let [conn (get-conn ds)
         base [:and [:= :p.post_id post-id] [:<= :p.created_at as-of]]
-        base (if include-deleted? base (conj base [:= :pm.deleted 0]))]
+        base (if include-deleted? base (conj base [:= :pm.deleted 0]))
+        base (if published-only? (conj base [:raw "p.published_at IS NOT NULL"]) base)]
     (jdbc/execute-one! conn
       (sql/format {:select (mapv #(keyword (str "p." (name %))) post-cols)
                    :from [[:posts :p]]
@@ -355,6 +384,36 @@
                    :order-by [[:p.created_at :desc]]
                    :limit 1})
       jdbc-opts)))
+
+(defn publish-post! [ds post-id {:keys [content footnotes image]}]
+  (let [conn (get-conn ds)
+        latest (jdbc/execute-one! conn
+                 (sql/format {:select [:content :footnotes :image :created_at :published_at]
+                              :from [:posts]
+                              :where [:= :post_id post-id]
+                              :order-by [[:created_at :desc]]
+                              :limit 1})
+                 jdbc-opts)
+        c (or content "")
+        f (or footnotes "")
+        i (or image "")
+        changed? (or (not= c (or (:content latest) ""))
+                     (not= f (or (:footnotes latest) ""))
+                     (not= i (or (:image latest) "")))]
+    (cond
+      changed?
+      (jdbc/execute-one! conn
+        (sql/format {:insert-into :posts
+                     :values [{:post_id post-id
+                               :content c
+                               :footnotes f
+                               :image i
+                               :published_at [:raw "datetime('now')"]}]})
+        jdbc-opts)
+      (nil? (:published_at latest))
+      (jdbc/execute-one! conn
+        ["UPDATE posts SET published_at = datetime('now') WHERE post_id = ? AND created_at = ?"
+         post-id (:created_at latest)]))))
 
 (defn get-post-versions [ds post-id {:keys [include-deleted?]}]
   (let [conn (get-conn ds)

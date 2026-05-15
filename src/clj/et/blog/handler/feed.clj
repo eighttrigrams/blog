@@ -20,7 +20,7 @@
                             :rendered-posts rendered})}))
 
 (defn feed-posts-handler [req]
-  (let [posts (db/list-posts (c/ensure-ds))]
+  (let [posts (db/list-posts-published (c/ensure-ds))]
     (build-feed req "Blog - Posts" "/feed/posts.xml" posts)))
 
 (defn feed-articles-handler [req]

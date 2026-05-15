@@ -1,0 +1,5 @@
+{:id "017-add-post-published"
+ :up ["ALTER TABLE posts ADD COLUMN published_at TEXT DEFAULT NULL"
+      "UPDATE posts SET published_at = created_at"]
+ :down ["ALTER TABLE posts DROP COLUMN published_at"]
+ :transactions false}
