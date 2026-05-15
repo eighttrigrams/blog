@@ -550,10 +550,11 @@
       [:p [:a.action-link {:href "/post/new"} "New Post"]])
     (if (seq posts)
       [:ul.post-list
-       (for [{:keys [post_id created_at first_at above-html below-html truncated? article-link resolved-image has_published]} posts]
+       (for [{:keys [post_id created_at first_published_at above-html below-html truncated? article-link resolved-image has_published]} posts]
          [:li
           [:div.post-heading
-           [:h2 [:a.post-permalink {:href (str "/post/" post_id)} "#"] " " (human-date (or first_at created_at))
+           [:h2 [:a.post-permalink {:href (str "/post/" post_id)} "#"] " "
+            (human-date (if logged-in? created_at (or first_published_at created_at)))
             (when (and logged-in? (some? has_published) (zero? has_published))
               [:span.version-badge.draft "draft"])]
            (when logged-in?
@@ -579,10 +580,16 @@
                 [:p.subtitle sub])))])]
       [:p "No posts yet."])))
 
-(defn post-page [{:keys [post versions logged-in? current-version rendered-content article-link resolved-image]}]
+(defn post-page [{:keys [post versions logged-in? current-version rendered-content article-link resolved-image
+                         first-published-at last-published-at published-count]}]
   (let [{:keys [post_id created_at published_at]} post]
     (layout {:title "Post" :logged-in? logged-in?}
       [:article
+       (when (and first-published-at (not article-link))
+         [:h2 (human-date first-published-at)])
+       (when (and (> (or published-count 0) 1) last-published-at)
+         [:p {:style "color: rgba(0,0,0,0.5); font-size: 0.9rem; margin-top: -0.5rem;"}
+          "Last modified: " (human-date last-published-at)])
        (if (and logged-in? (> (count versions) 1))
          (version-nav "/post/" :post_id post (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
@@ -662,10 +669,10 @@
     [:h1 "Deleted Posts"]
     (if (seq posts)
       [:ul.post-list
-       (for [{:keys [created_at first_at rendered-content]} posts]
+       (for [{:keys [created_at rendered-content]} posts]
          [:li
           [:div.post-heading
-           [:h2 (human-date (or first_at created_at))]]
+           [:h2 (human-date created_at)]]
           [:div.article-content (h/raw rendered-content)]])]
       [:p "No deleted posts."])))
 

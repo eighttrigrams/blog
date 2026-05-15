@@ -319,25 +319,39 @@
           SELECT post_id FROM posts WHERE published_at IS NOT NULL GROUP BY post_id
         ) pub ON pub.post_id = p.post_id
         INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 0
-        ORDER BY has_published ASC, latest.first_at DESC"]
+        ORDER BY has_published ASC, latest.max_created_at DESC"]
       jdbc-opts)))
 
 (defn list-posts-published [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
       ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, p.published_at,
-               latest.first_at
+               pub.first_published_at
         FROM posts p
         INNER JOIN (
-          SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
+          SELECT post_id, MAX(created_at) AS max_created_at
           FROM posts
           GROUP BY post_id
         ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
         INNER JOIN (
-          SELECT DISTINCT post_id FROM posts WHERE published_at IS NOT NULL
+          SELECT post_id, MIN(published_at) AS first_published_at
+          FROM posts
+          WHERE published_at IS NOT NULL
+          GROUP BY post_id
         ) pub ON pub.post_id = p.post_id
         INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 0
-        ORDER BY latest.first_at DESC"]
+        ORDER BY pub.first_published_at DESC"]
+      jdbc-opts)))
+
+(defn get-post-publish-stats [ds post-id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:select [[[:min :published_at] :first_published_at]
+                            [[:max :published_at] :last_published_at]
+                            [[:count :*] :published_count]]
+                   :from [:posts]
+                   :where [:and [:= :post_id post-id]
+                                [:<> :published_at nil]]})
       jdbc-opts)))
 
 (defn list-deleted-posts [ds]
@@ -351,7 +365,7 @@
           GROUP BY post_id
         ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
         INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 1
-        ORDER BY latest.first_at DESC"]
+        ORDER BY latest.max_created_at DESC"]
       jdbc-opts)))
 
 (defn- post-has-published-clause []

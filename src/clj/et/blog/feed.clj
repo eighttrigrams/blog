@@ -16,7 +16,7 @@
     (str (str/replace datetime-str " " "T") "Z")))
 
 (defn atom-feed [{:keys [title feed-url site-url posts article-links rendered-posts]}]
-  (let [updated (or (some-> (first posts) (get :first_at (get (first posts) :created_at)) iso-date)
+  (let [updated (or (some-> (first posts) :created_at iso-date)
                     "1970-01-01T00:00:00Z")]
     (str
       "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -30,7 +30,7 @@
         (map-indexed
           (fn [idx post]
             (let [post-id (:post_id post)
-                  created (or (:first_at post) (:created_at post))
+                  created (:created_at post)
                   link (get article-links post-id)
                   post-url (str site-url "/post/" post-id)
                   content-html (nth rendered-posts idx "")]

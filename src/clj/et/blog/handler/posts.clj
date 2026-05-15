@@ -39,13 +39,17 @@
       (let [versions (if auth? (db/get-post-versions (c/ensure-ds) id {}) [post])
             fetch-fn (fn [aid as-of] (db/get-article-version (c/ensure-ds) aid as-of {}))
             rendered-content (render/render-content post fetch-fn)
-            article-link (some-> (db/get-post-article-link (c/ensure-ds) id) resolve-link-preview)]
+            article-link (some-> (db/get-post-article-link (c/ensure-ds) id) resolve-link-preview)
+            stats (db/get-post-publish-stats (c/ensure-ds) id)]
         (c/html-response 200
           (views/post-page {:post post :versions versions :logged-in? auth?
                             :current-version (:created_at post)
                             :rendered-content rendered-content
                             :article-link article-link
-                            :resolved-image (not-empty (:image (c/resolve-image-field post :image)))})))
+                            :resolved-image (not-empty (:image (c/resolve-image-field post :image)))
+                            :first-published-at (:first_published_at stats)
+                            :last-published-at (:last_published_at stats)
+                            :published-count (or (:published_count stats) 0)})))
       (c/html-response 404
         (views/not-found-page {:logged-in? auth?})))))
 
