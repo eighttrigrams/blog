@@ -585,15 +585,19 @@
   (let [{:keys [post_id created_at published_at]} post]
     (layout {:title "Post" :logged-in? logged-in?}
       [:article
-       (when (and first-published-at (not article-link))
-         (let [modified? (and last-published-at
-                              (not= last-published-at first-published-at))]
-           (if modified?
-             [:h2 "Last modified: " (human-date last-published-at)]
-             [:h2 (human-date first-published-at)])))
-       (if (and logged-in? (> (count versions) 1))
-         (version-nav "/post/" :post_id post (or current-version created_at) versions)
-         [:div.version-nav [:span.article-date created_at]])
+       (let [modified? (and last-published-at first-published-at
+                            (not= last-published-at first-published-at))]
+         (list
+           (when (and first-published-at (not article-link))
+             [:h2 (human-date first-published-at)])
+           (if (and logged-in? (> (count versions) 1))
+             (version-nav "/post/" :post_id post (or current-version created_at) versions)
+             [:div.version-nav
+              [:span.article-date
+               (cond
+                 modified? (str "Last modified: " (human-date last-published-at))
+                 first-published-at first-published-at
+                 :else created_at)]])))
        (when (and logged-in? (nil? published_at) first-published-at
                   (neg? (compare created_at first-published-at)))
          [:span.version-badge.draft "PRE-PUBLISHED"])
