@@ -587,9 +587,10 @@
       [:article
        (when (and first-published-at (not article-link))
          [:h2 (human-date first-published-at)])
-       (when (and (> (or published-count 0) 1) last-published-at)
+       (when (and last-published-at first-published-at
+                  (not= last-published-at first-published-at))
          [:p {:style "color: rgba(0,0,0,0.5); font-size: 0.9rem; margin-top: -0.5rem;"}
-          "Last modified: " (human-date last-published-at)])
+          "Last modified: " last-published-at])
        (if (and logged-in? (> (count versions) 1))
          (version-nav "/post/" :post_id post (or current-version created_at) versions)
          [:div.version-nav [:span.article-date created_at]])
