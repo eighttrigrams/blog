@@ -326,21 +326,18 @@
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
       ["SELECT p.post_id, p.content, p.footnotes, p.image, p.created_at, p.published_at,
-               firsts.first_at
+               latest.first_at
         FROM posts p
         INNER JOIN (
-          SELECT post_id, MAX(created_at) AS max_published_at
+          SELECT post_id, MAX(created_at) AS max_created_at, MIN(created_at) AS first_at
           FROM posts
-          WHERE published_at IS NOT NULL
           GROUP BY post_id
-        ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_published_at
+        ) latest ON p.post_id = latest.post_id AND p.created_at = latest.max_created_at
         INNER JOIN (
-          SELECT post_id, MIN(created_at) AS first_at
-          FROM posts
-          GROUP BY post_id
-        ) firsts ON firsts.post_id = p.post_id
+          SELECT DISTINCT post_id FROM posts WHERE published_at IS NOT NULL
+        ) pub ON pub.post_id = p.post_id
         INNER JOIN post_meta pm ON pm.post_id = p.post_id AND pm.deleted = 0
-        ORDER BY firsts.first_at DESC"]
+        ORDER BY latest.first_at DESC"]
       jdbc-opts)))
 
 (defn list-deleted-posts [ds]
@@ -357,11 +354,17 @@
         ORDER BY latest.first_at DESC"]
       jdbc-opts)))
 
+(defn- post-has-published-clause []
+  [:exists {:select [1]
+            :from [[:posts :p2]]
+            :where [:and [:= :p2.post_id :p.post_id]
+                         [:<> :p2.published_at nil]]}])
+
 (defn get-post [ds post-id {:keys [include-deleted? published-only?]}]
   (let [conn (get-conn ds)
         base [:and [:= :p.post_id post-id]]
         base (if include-deleted? base (conj base [:= :pm.deleted 0]))
-        base (if published-only? (conj base [:raw "p.published_at IS NOT NULL"]) base)]
+        base (if published-only? (conj base (post-has-published-clause)) base)]
     (jdbc/execute-one! conn
       (sql/format {:select (mapv #(keyword (str "p." (name %))) post-cols)
                    :from [[:posts :p]]
@@ -375,7 +378,7 @@
   (let [conn (get-conn ds)
         base [:and [:= :p.post_id post-id] [:<= :p.created_at as-of]]
         base (if include-deleted? base (conj base [:= :pm.deleted 0]))
-        base (if published-only? (conj base [:raw "p.published_at IS NOT NULL"]) base)]
+        base (if published-only? (conj base (post-has-published-clause)) base)]
     (jdbc/execute-one! conn
       (sql/format {:select (mapv #(keyword (str "p." (name %))) post-cols)
                    :from [[:posts :p]]
