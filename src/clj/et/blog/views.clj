@@ -595,7 +595,7 @@
              [:div.version-nav
               [:span.article-date
                (cond
-                 modified? (str "Last modified: " (human-date last-published-at))
+                 modified? (str "Last modified: " last-published-at)
                  first-published-at first-published-at
                  :else created_at)]])))
        (when (and logged-in? (nil? published_at) first-published-at
