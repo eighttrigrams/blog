@@ -66,9 +66,7 @@
             footnotes (or (get-in req [:form-params "footnotes"]) "")
             image (or (get-in req [:form-params "image"]) "")
             publish? (some? (get-in req [:form-params "publish"]))
-            post-id (db/create-post! (c/ensure-ds) {:content content :footnotes footnotes :image image})]
-        (when publish?
-          (db/publish-post! (c/ensure-ds) post-id {:content content :footnotes footnotes :image image}))
+            post-id (db/create-post! (c/ensure-ds) {:content content :footnotes footnotes :image image :publish? publish?})]
         (c/redirect (str "/post/" post-id))))))
 
 (defn edit-post-handler [req]

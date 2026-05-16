@@ -277,15 +277,16 @@
                  jdbc-opts)]
     (inc (first (vals result)))))
 
-(defn create-post! [ds {:keys [content footnotes image]}]
+(defn create-post! [ds {:keys [content footnotes image publish?]}]
   (let [conn (get-conn ds)
-        post-id (next-post-id ds)]
+        post-id (next-post-id ds)
+        row (cond-> {:post_id post-id
+                     :content (or content "")
+                     :footnotes (or footnotes "")
+                     :image (or image "")}
+              publish? (assoc :published_at [:raw "datetime('now')"]))]
     (jdbc/execute-one! conn
-      (sql/format {:insert-into :posts
-                   :values [{:post_id post-id
-                             :content (or content "")
-                             :footnotes (or footnotes "")
-                             :image (or image "")}]})
+      (sql/format {:insert-into :posts :values [row]})
       jdbc-opts)
     (jdbc/execute-one! conn
       (sql/format {:insert-into :post_meta
@@ -294,14 +295,28 @@
     post-id))
 
 (defn update-post! [ds post-id {:keys [content footnotes image]}]
-  (let [conn (get-conn ds)]
-    (jdbc/execute-one! conn
-      (sql/format {:insert-into :posts
-                   :values [{:post_id post-id
-                             :content (or content "")
-                             :footnotes (or footnotes "")
-                             :image (or image "")}]})
-      jdbc-opts)))
+  (let [conn (get-conn ds)
+        latest (jdbc/execute-one! conn
+                 (sql/format {:select [:content :footnotes :image]
+                              :from [:posts]
+                              :where [:= :post_id post-id]
+                              :order-by [[:created_at :desc]]
+                              :limit 1})
+                 jdbc-opts)
+        c (or content "")
+        f (or footnotes "")
+        i (or image "")
+        changed? (or (not= c (or (:content latest) ""))
+                     (not= f (or (:footnotes latest) ""))
+                     (not= i (or (:image latest) "")))]
+    (when changed?
+      (jdbc/execute-one! conn
+        (sql/format {:insert-into :posts
+                     :values [{:post_id post-id
+                               :content c
+                               :footnotes f
+                               :image i}]})
+        jdbc-opts))))
 
 (defn list-posts [ds]
   (let [conn (get-conn ds)]
@@ -403,34 +418,15 @@
       jdbc-opts)))
 
 (defn publish-post! [ds post-id {:keys [content footnotes image]}]
-  (let [conn (get-conn ds)
-        latest (jdbc/execute-one! conn
-                 (sql/format {:select [:content :footnotes :image :created_at :published_at]
-                              :from [:posts]
-                              :where [:= :post_id post-id]
-                              :order-by [[:created_at :desc]]
-                              :limit 1})
-                 jdbc-opts)
-        c (or content "")
-        f (or footnotes "")
-        i (or image "")
-        changed? (or (not= c (or (:content latest) ""))
-                     (not= f (or (:footnotes latest) ""))
-                     (not= i (or (:image latest) "")))]
-    (cond
-      changed?
-      (jdbc/execute-one! conn
-        (sql/format {:insert-into :posts
-                     :values [{:post_id post-id
-                               :content c
-                               :footnotes f
-                               :image i
-                               :published_at [:raw "datetime('now')"]}]})
-        jdbc-opts)
-      (nil? (:published_at latest))
-      (jdbc/execute-one! conn
-        ["UPDATE posts SET published_at = datetime('now') WHERE post_id = ? AND created_at = ?"
-         post-id (:created_at latest)]))))
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      (sql/format {:insert-into :posts
+                   :values [{:post_id post-id
+                             :content (or content "")
+                             :footnotes (or footnotes "")
+                             :image (or image "")
+                             :published_at [:raw "datetime('now')"]}]})
+      jdbc-opts)))
 
 (defn get-post-versions [ds post-id {:keys [include-deleted?]}]
   (let [conn (get-conn ds)
