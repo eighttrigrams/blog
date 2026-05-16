@@ -1,5 +1,5 @@
 {:db {:type :sqlite-file
       :path "data/blog.db"}
- :port 3028
+ :port #long #or [#env PORT 3130]
  :image-base-url "https://daniel-de-oliveira.com"
  #_#_:dangerously-skip-logins? true}

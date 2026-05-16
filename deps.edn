@@ -12,7 +12,8 @@
         com.vladsch.flexmark/flexmark-all {:mvn/version "0.64.8"}
         nrepl/nrepl {:mvn/version "1.5.1"}
         com.taoensso/telemere {:mvn/version "1.2.1"}
-        com.draines/postal {:mvn/version "2.0.5"}}
+        com.draines/postal {:mvn/version "2.0.5"}
+        aero/aero {:mvn/version "1.1.6"}}
  :aliases {:run {:exec-fn et.blog.server/-main}
            :test {:extra-paths ["test/clj"]
                   :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1"
