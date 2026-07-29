@@ -1,5 +1,6 @@
 (ns et.blog.handler.comments
   (:require [et.blog.handler.common :as c]
+            [et.blog.handler.visibility :as vis]
             [et.blog.db :as db]
             [et.blog.views :as views]
             [et.blog.render :as render]
@@ -28,13 +29,10 @@
 (defn article-comments-handler [req]
   (let [auth? (c/logged-in? req)
         article-id (Integer/parseInt (get-in req [:params :id]))
-        article (db/get-article (c/ensure-ds) article-id {:published-only? (not auth?)})]
+        article (vis/visible-article (c/ensure-ds) article-id {:pub? (not auth?)})]
     (if article
-      (let [comments (db/get-comments-for-article (c/ensure-ds) article-id)
-            replies-by-comment (when (seq comments)
-                                 (group-by :comment_id
-                                   (db/get-replies-for-comments (c/ensure-ds) (map :id comments))))
-            comments (mapv #(assoc % :replies (get replies-by-comment (:id %))) comments)]
+      (let [comments (vis/with-replies (c/ensure-ds)
+                       (db/get-comments-for-article (c/ensure-ds) article-id))]
         (c/html-response 200
           (views/comments-list-page {:article article :comments comments :logged-in? auth?})))
       (c/html-response 404
@@ -44,13 +42,10 @@
   (let [auth? (c/logged-in? req)
         article-id (Integer/parseInt (get-in req [:params :id]))
         ver (Integer/parseInt (get-in req [:params :version]))
-        article (db/get-article-by-version (c/ensure-ds) article-id ver {})]
+        article (vis/visible-article (c/ensure-ds) article-id {:pub? (not auth?) :version ver})]
     (if (and article (pos? ver))
-      (let [comments (db/get-comments-for-version (c/ensure-ds) article-id ver)
-            replies-by-comment (when (seq comments)
-                                 (group-by :comment_id
-                                   (db/get-replies-for-comments (c/ensure-ds) (map :id comments))))
-            comments (mapv #(assoc % :replies (get replies-by-comment (:id %))) comments)]
+      (let [comments (vis/with-replies (c/ensure-ds)
+                       (db/get-comments-for-version (c/ensure-ds) article-id ver))]
         (c/html-response 200
           (views/comments-list-page {:article article :comments comments :version ver :logged-in? auth?})))
       (c/html-response 404

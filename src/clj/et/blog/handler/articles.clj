@@ -1,5 +1,6 @@
 (ns et.blog.handler.articles
   (:require [et.blog.handler.common :as c]
+            [et.blog.handler.visibility :as vis]
             [et.blog.db :as db]
             [et.blog.views :as views]
             [et.blog.render :as render]
@@ -9,17 +10,7 @@
 (defn home-handler [req]
   (let [auth? (c/logged-in? req)
         topic (get-in req [:query-params "topic"])
-        articles (db/list-articles (c/ensure-ds) {:published-only? (not auth?)})
-        article-ids (mapv :article_id articles)
-        post-dates (db/get-articles-latest-post-dates (c/ensure-ds) article-ids)
-        articles (->> articles
-                      (mapv #(let [pd (get post-dates (:article_id %))]
-                               (-> %
-                                   c/resolve-preview-image
-                                   (assoc :latest-version (:article_version pd))
-                                   (assoc :latest-published-at (:published_at pd)))))
-                      (sort-by :latest-published-at #(compare %2 %1)))
-        articles (if auth? articles (remove #(= 36 (:article_id %)) articles))
+        articles (vis/listed-articles (c/ensure-ds) {:pub? (not auth?)})
         articles (if topic
                    (filter #(some #{(str/lower-case topic)} (map str/lower-case (str/split (or (:topics %) "") #"\s+"))) articles)
                    articles)]
@@ -32,29 +23,19 @@
         id (Integer/parseInt (get-in req [:params :id]))
         as-of (get-in req [:params :as-of])
         ver (get-in req [:params :version])
-        raw     (cond
-                  as-of (db/get-article-version (c/ensure-ds) id as-of {})
-                  ver   (let [v (Integer/parseInt ver)]
-                          (if (and pub? (zero? v))
-                            nil
-                            (db/get-article-by-version (c/ensure-ds) id v {})))
-                  :else (db/get-article (c/ensure-ds) id {:published-only? pub?}))
-        article (if (and pub? raw (zero? (or (:version raw) 0)))
-                  nil
-                  raw)]
+        article (vis/visible-article (c/ensure-ds) id
+                                     {:pub? pub?
+                                      :as-of as-of
+                                      :version (when ver (Integer/parseInt ver))})]
     (if article
-      (let [versions (db/get-article-versions (c/ensure-ds) id {:published-only? pub?})
+      (let [versions (vis/visible-versions (c/ensure-ds) id {:pub? pub?})
             fetch-fn (fn [aid as-of] (db/get-article-version (c/ensure-ds) aid as-of {}))
             rendered-content (render/render-content article fetch-fn)
             rendered-addenda (render/markdown->html (:addenda article))
             rendered-preamble (render/markdown->html (:preamble article))
-            comments (when (and (:version article) (pos? (:version article)))
-                       (db/get-comments-up-to-version (c/ensure-ds) id (:version article)))
-            replies-by-comment (when (seq comments)
-                                 (group-by :comment_id
-                                   (db/get-replies-for-comments (c/ensure-ds) (map :id comments))))
-            comments-with-replies (when comments
-                                    (mapv #(assoc % :replies (get replies-by-comment (:id %))) comments))]
+            comments-with-replies (when (and (:version article) (pos? (:version article)))
+                                    (vis/with-replies (c/ensure-ds)
+                                      (db/get-comments-up-to-version (c/ensure-ds) id (:version article))))]
         (c/html-response 200
           (views/article-page {:article article :versions versions :logged-in? auth?
                                :current-version (:created_at article)
