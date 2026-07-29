@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [et.blog.server :as server]
             [et.blog.db :as db]
+            [cheshire.core :as json]
             [hickory.core :as hc]
             [hickory.select :as hs]))
 
@@ -47,6 +48,9 @@
 
 (defn parse [response]
   (-> (:body response) hc/parse hc/as-hickory))
+
+(defn json-body [response]
+  (json/parse-string (:body response) true))
 
 (defn text-of [node]
   (cond

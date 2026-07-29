@@ -1,9 +1,10 @@
 (ns et.blog.server
   (:require [ring.adapter.jetty9 :as jetty]
             [clojure.string :as str]
-            [compojure.core :refer [defroutes GET POST]]
+            [compojure.core :refer [defroutes GET POST context]]
             [compojure.route :as route]
             [ring.middleware.params :refer [wrap-params]]
+            [ring.middleware.json :refer [wrap-json-response]]
             [et.blog.middleware.rate-limit :refer [wrap-rate-limit]]
             [et.blog.render :as render]
             [et.blog.views :as views]
@@ -14,6 +15,7 @@
             [et.blog.handler.posts :as posts-h]
             [et.blog.handler.email :as email-h]
             [et.blog.handler.feed :as feed-h]
+            [et.blog.handler.api :as api-h]
             [nrepl.server :as nrepl]
             [taoensso.telemere :as tel])
   (:gen-class))
@@ -30,7 +32,21 @@
                        (into {}))]
       (handler (assoc req :cookies cookies)))))
 
+(defroutes api-routes
+  (context "/api" []
+    (GET "/describe" [] api-h/describe-handler)
+    (GET "/articles" [] api-h/list-articles-handler)
+    (GET "/articles/:id/versions/:version/comments" [] api-h/list-version-comments-handler)
+    (GET "/articles/:id/versions/:version" [] api-h/get-article-version-handler)
+    (GET "/articles/:id/versions" [] api-h/list-article-versions-handler)
+    (GET "/articles/:id/comments" [] api-h/list-article-comments-handler)
+    (GET "/articles/:id" [] api-h/get-article-handler)
+    ;; Inside the context, so an unknown path under /api answers in JSON like the
+    ;; rest of the API instead of falling through to the HTML 404 page.
+    (route/not-found {:status 404 :body {:error "Not found"}})))
+
 (defroutes app-routes
+  (wrap-json-response api-routes)
   (GET "/" [] (fn [req] (articles-h/article-handler (assoc-in req [:params :id] "36"))))
   (GET "/articles" [] articles-h/home-handler)
   (GET "/login" [] auth-h/login-page-handler)
