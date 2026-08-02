@@ -34,10 +34,19 @@
                        (into {}))]
       (handler (assoc req :cookies cookies)))))
 
+(defn- json-body
+  "Parse a JSON request body for the one handler that needs it. Scoped per route
+  rather than around api-routes or the /api context: api-routes is the first entry
+  of the app-routes chain, so middleware wrapped around it runs on every request to
+  blog and can answer a non-API one before the HTML routes are consulted — and at
+  the context it would answer a malformed body on the reads, which take none."
+  [handler]
+  (wrap-json-body handler {:keywords? true}))
+
 (defroutes api-routes
   (context "/api" []
-    (POST "/auth/login" [] notes-users-h/login-api-handler)
-    (POST "/notes" [] notes-h/create-note-api-handler)
+    (POST "/auth/login" [] (json-body notes-users-h/login-api-handler))
+    (POST "/notes" [] (json-body notes-h/create-note-api-handler))
     (GET "/describe" [] api-h/describe-handler)
     (GET "/articles" [] api-h/list-articles-handler)
     (GET "/articles/:id/versions/:version/comments" [] api-h/list-version-comments-handler)
@@ -50,9 +59,7 @@
     (route/not-found {:status 404 :body {:error "Not found"}})))
 
 (defroutes app-routes
-  (-> api-routes
-      (wrap-json-body {:keywords? true})
-      wrap-json-response)
+  (wrap-json-response api-routes)
   (GET "/" [] (fn [req] (articles-h/article-handler (assoc-in req [:params :id] "36"))))
   (GET "/articles" [] articles-h/home-handler)
   (GET "/login" [] auth-h/login-page-handler)
