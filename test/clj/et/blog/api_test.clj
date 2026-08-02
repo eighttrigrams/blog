@@ -5,6 +5,7 @@
 
 (def ^:private api-paths
   #{"/api/auth/login"
+    "/api/notes"
     "/api/describe"
     "/api/articles"
     "/api/articles/:id"
@@ -16,7 +17,8 @@
 (def ^:private write-paths
   "The only API routes that may mutate anything. Everything else is a read, so a
   new write has to be a deliberate edit here rather than an accident."
-  #{"/api/auth/login"})
+  #{"/api/auth/login"
+    "/api/notes"})
 
 (defn- publish-second-version! [app token overrides post-content]
   (Thread/sleep 1100)

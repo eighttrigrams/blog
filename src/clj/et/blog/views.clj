@@ -254,6 +254,55 @@
            [:li {:style "margin-bottom: 0.3rem; font-size: 0.95rem; color: rgba(0,0,0,0.7);"}
             (str email " \u2014 " created_at)])]]])))
 
+(defn notes-page [{:keys [logged-in? notes error]}]
+  (layout {:title "Notes" :logged-in? logged-in?}
+    [:h1 "Notes"]
+    (when error
+      [:p.error error])
+    [:form {:method "POST" :action "/notes" :style "max-width: 500px;"}
+     [:div.form-group
+      [:label {:for "title"} "Title"]
+      [:input {:type "text" :name "title" :id "title" :required true}]]
+     [:div.form-group
+      [:label {:for "description"} "Description"]
+      [:textarea {:name "description" :id "description" :style "min-height: 100px;"}]]
+     [:button.btn {:type "submit"} "Add Note"]]
+    [:div {:style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem;"}
+     (if (seq notes)
+       [:ul {:style "list-style: none; padding: 0;"}
+        (for [{:keys [id title description source created_at]} notes]
+          [:li {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
+           [:div.post-heading
+            [:h2 {:style "font-size: 1.2rem;"} title]
+            [:div.edit-actions
+             [:a.btn.btn-small {:href (str "/notes/" id "/edit")} "Edit"]
+             [:form {:method "POST" :action (str "/notes/" id "/done")}
+              [:button.btn.btn-small.btn-publish {:type "submit"} "Done"]]]]
+           [:p {:style "margin: 0; color: rgba(0,0,0,0.4); font-size: 0.85rem;"}
+            (human-datetime created_at)
+            (when-not (str/blank? source) (str " — " source))]
+           (when-not (str/blank? description)
+             [:p {:style "margin: 0.5rem 0 0 0; white-space: pre-wrap;"} description])])]
+       [:p "The Notes box is empty."])]))
+
+(defn edit-note-page [{:keys [logged-in? note error]}]
+  (layout {:title "Edit Note" :logged-in? logged-in?}
+    (when error
+      [:p.error error])
+    [:form {:method "POST" :action (str "/notes/" (:id note)) :style "max-width: 500px;"}
+     [:div.edit-heading
+      [:h1 "Edit Note"]
+      [:div.edit-actions
+       [:button.btn {:type "submit"} "Save"]
+       [:a.btn.btn-cancel {:href "/notes"} "Cancel"]]]
+     [:div.form-group
+      [:label {:for "title"} "Title"]
+      [:input {:type "text" :name "title" :id "title" :value (or (:title note) "") :required true}]]
+     [:div.form-group
+      [:label {:for "description"} "Description"]
+      [:textarea {:name "description" :id "description" :style "min-height: 150px;"}
+       (or (:description note) "")]]]))
+
 (defn notes-users-page [{:keys [logged-in? notes-users created error]}]
   (layout {:title "Notes users" :logged-in? logged-in?}
     [:h1 "Notes users"]

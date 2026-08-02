@@ -11,6 +11,7 @@
   ;; describe walks them, so they must be loaded whenever describe can be called.
   (:require [et.blog.handler.common :as c]
             [et.blog.handler.visibility :as vis]
+            [et.blog.handler.notes]
             [et.blog.handler.notes-users]
             [et.blog.db :as db]))
 
@@ -79,6 +80,7 @@
   enumerate the surface from var metadata, so a handler's docstring *is* its
   documentation."
   '[et.blog.handler.api
+    et.blog.handler.notes
     et.blog.handler.notes-users])
 
 (def ^:private route-doc-re

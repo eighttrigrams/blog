@@ -16,6 +16,7 @@
             [et.blog.handler.email :as email-h]
             [et.blog.handler.feed :as feed-h]
             [et.blog.handler.api :as api-h]
+            [et.blog.handler.notes :as notes-h]
             [et.blog.handler.notes-users :as notes-users-h]
             [nrepl.server :as nrepl]
             [taoensso.telemere :as tel])
@@ -36,6 +37,7 @@
 (defroutes api-routes
   (context "/api" []
     (POST "/auth/login" [] notes-users-h/login-api-handler)
+    (POST "/notes" [] notes-h/create-note-api-handler)
     (GET "/describe" [] api-h/describe-handler)
     (GET "/articles" [] api-h/list-articles-handler)
     (GET "/articles/:id/versions/:version/comments" [] api-h/list-version-comments-handler)
@@ -88,6 +90,11 @@
   (GET "/post/:id/delete" [] posts-h/confirm-delete-post-handler)
   (POST "/post/:id/delete" [] posts-h/delete-post-handler)
   (POST "/post/:id" [] posts-h/update-post-handler)
+  (GET "/notes" [] notes-h/notes-page-handler)
+  (POST "/notes" [] notes-h/create-note-handler)
+  (GET "/notes/:id/edit" [] notes-h/edit-note-handler)
+  (POST "/notes/:id/done" [] notes-h/done-note-handler)
+  (POST "/notes/:id" [] notes-h/update-note-handler)
   (GET "/notes-users" [] notes-users-h/notes-users-page-handler)
   (POST "/notes-users" [] notes-users-h/create-notes-user-handler)
   (POST "/notes-users/:id/revoke" [] notes-users-h/revoke-notes-user-handler)
