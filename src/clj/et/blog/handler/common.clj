@@ -56,8 +56,24 @@
 
 (defn logged-in? [req]
   (or (skip-logins?)
-      (when-let [token (get-in req [:cookies "token" :value])]
-        (some? (auth/verify-token token)))))
+      (boolean
+        (when-let [token (get-in req [:cookies "token" :value])]
+          ;; Notes tokens are signed with the same secret, so the :admin claim —
+          ;; not merely a valid signature — is what makes a reader the owner.
+          (true? (:admin (auth/verify-token token)))))))
+
+(defn- bearer-token [req]
+  (when-let [header (get-in req [:headers "authorization"])]
+    (second (re-find #"(?i)^Bearer\s+(\S+)$" header))))
+
+(defn notes-user
+  "The name of the notes user this request authenticates as, or nil. A token is
+  only good while its row is present and unrevoked, so revoking takes effect on
+  the next request rather than when some cached token expires."
+  [req]
+  (when-let [name (some-> (bearer-token req) auth/verify-token :notes-user)]
+    (when (db/get-active-notes-user (ensure-ds) name)
+      name)))
 
 (defn html-response [status body]
   {:status status

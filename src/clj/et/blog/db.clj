@@ -593,6 +593,41 @@
       ["SELECT id, email, message, created_at FROM messages ORDER BY created_at DESC"]
       jdbc-opts)))
 
+;; --- Notes users ---
+
+(defn create-notes-user!
+  "Store a notes user under `name` with an already-derived `password-hash`. The
+  plaintext is never stored, so it cannot be shown again after creation."
+  [ds name password-hash]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["INSERT INTO notes_users (name, password_hash) VALUES (?, ?)" name password-hash])))
+
+(defn get-active-notes-user
+  "The notes user of that name while it may still deliver Notes. A revoked row
+  stays in the table as history but answers nil here."
+  [ds name]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["SELECT id, name, password_hash, created_at FROM notes_users
+        WHERE name = ? AND revoked_at IS NULL" name]
+      jdbc-opts)))
+
+(defn list-notes-users [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT id, name, created_at, revoked_at FROM notes_users ORDER BY created_at DESC"]
+      jdbc-opts)))
+
+(defn revoke-notes-user!
+  "Stop the user from delivering Notes, keeping the row as a record that it
+  existed. Already-revoked rows keep their first revocation date."
+  [ds id]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["UPDATE notes_users SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE id = ? AND revoked_at IS NULL" id])))
+
 (defn create-comment! [ds article-id article-version email display-name body]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn

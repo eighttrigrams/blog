@@ -4,7 +4,7 @@
             [compojure.core :refer [defroutes GET POST context]]
             [compojure.route :as route]
             [ring.middleware.params :refer [wrap-params]]
-            [ring.middleware.json :refer [wrap-json-response]]
+            [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [et.blog.middleware.rate-limit :refer [wrap-rate-limit]]
             [et.blog.render :as render]
             [et.blog.views :as views]
@@ -16,6 +16,7 @@
             [et.blog.handler.email :as email-h]
             [et.blog.handler.feed :as feed-h]
             [et.blog.handler.api :as api-h]
+            [et.blog.handler.notes-users :as notes-users-h]
             [nrepl.server :as nrepl]
             [taoensso.telemere :as tel])
   (:gen-class))
@@ -34,6 +35,7 @@
 
 (defroutes api-routes
   (context "/api" []
+    (POST "/auth/login" [] notes-users-h/login-api-handler)
     (GET "/describe" [] api-h/describe-handler)
     (GET "/articles" [] api-h/list-articles-handler)
     (GET "/articles/:id/versions/:version/comments" [] api-h/list-version-comments-handler)
@@ -46,7 +48,9 @@
     (route/not-found {:status 404 :body {:error "Not found"}})))
 
 (defroutes app-routes
-  (wrap-json-response api-routes)
+  (-> api-routes
+      (wrap-json-body {:keywords? true})
+      wrap-json-response)
   (GET "/" [] (fn [req] (articles-h/article-handler (assoc-in req [:params :id] "36"))))
   (GET "/articles" [] articles-h/home-handler)
   (GET "/login" [] auth-h/login-page-handler)
@@ -84,6 +88,9 @@
   (GET "/post/:id/delete" [] posts-h/confirm-delete-post-handler)
   (POST "/post/:id/delete" [] posts-h/delete-post-handler)
   (POST "/post/:id" [] posts-h/update-post-handler)
+  (GET "/notes-users" [] notes-users-h/notes-users-page-handler)
+  (POST "/notes-users" [] notes-users-h/create-notes-user-handler)
+  (POST "/notes-users/:id/revoke" [] notes-users-h/revoke-notes-user-handler)
   (GET "/email" [] email-h/email-page-handler)
   (POST "/email" [] email-h/email-submit-handler)
   (POST "/email/message" [] email-h/message-submit-handler)

@@ -4,13 +4,19 @@
             [et.blog.test-support :as t]))
 
 (def ^:private api-paths
-  #{"/api/describe"
+  #{"/api/auth/login"
+    "/api/describe"
     "/api/articles"
     "/api/articles/:id"
     "/api/articles/:id/comments"
     "/api/articles/:id/versions"
     "/api/articles/:id/versions/:version"
     "/api/articles/:id/versions/:version/comments"})
+
+(def ^:private write-paths
+  "The only API routes that may mutate anything. Everything else is a read, so a
+  new write has to be a deliberate edit here rather than an accident."
+  #{"/api/auth/login"})
 
 (defn- publish-second-version! [app token overrides post-content]
   (Thread/sleep 1100)
@@ -29,9 +35,10 @@
     (is (= 200 (:status resp)))
     (is (str/includes? (get-in resp [:headers "Content-Type"]) "application/json"))
     (is (= api-paths (set (map :path routes))))
-    (testing "every route documents itself and none of them mutates"
-      (doseq [{:keys [method doc name]} routes]
-        (is (= "GET" method) (str name " must be a read"))
+    (testing "every route documents itself, and only a declared write mutates"
+      (doseq [{:keys [method path doc name]} routes]
+        (is (or (= "GET" method) (contains? write-paths path))
+            (str name " must be a read, or one of the declared writes"))
         (is (not (str/blank? doc)) (str name " must carry a docstring"))))))
 
 (deftest listing-excludes-drafts-and-deleted
@@ -217,3 +224,39 @@
       (is (= 404 (:status (t/POST app "/api/articles" {"title" "Injected"}))))
       (is (empty? (filter #(= "Injected" (:title %))
                           (t/json-body (t/GET app "/api/articles"))))))))
+
+;; The two rows of the permission matrix that every notes test would pass
+;; whether or not the rest of /api got locked down with it. Blog's reads are
+;; deliberately public and plurama-cli has blog registered credential-free, so a
+;; token requirement anywhere under /api would break the owner's own tooling.
+(deftest the-reads-stay-public-whatever-the-caller-presents
+  (let [app (t/make-app)
+        admin (t/login app)]
+    (t/create-and-publish! app admin
+      {"title" "Public" "content" "Body"} "Announcement")
+    (t/POST app "/article/1/version/1/comment"
+      {"email" "alice@example.com" "display-name" "Alice" "body" "A comment"})
+    (t/POST app "/notes-users" {"name" "notes-user" "password" "pw"} admin)
+    (let [notes (t/notes-token app "notes-user" "pw")
+          read-paths ["/api/describe"
+                      "/api/articles"
+                      "/api/articles/1"
+                      "/api/articles/1/comments"
+                      "/api/articles/1/versions"
+                      "/api/articles/1/versions/1"
+                      "/api/articles/1/versions/1/comments"]]
+      (is (some? notes))
+      (testing "unauthenticated, exactly as before the notes user existed"
+        (doseq [path read-paths]
+          (is (= 200 (:status (t/GET app path)))
+              (str path " must answer 200 to anyone"))))
+      (testing "and handed a notes token it does not need, it is ignored, not rejected"
+        (doseq [path read-paths]
+          (let [with-token (t/GET-bearer app path notes)]
+            (is (= 200 (:status with-token))
+                (str path " must ignore a token that does not authorize it"))
+            (is (= (t/json-body (t/GET app path)) (t/json-body with-token))
+                (str path " must answer a notes user exactly what it answers a visitor")))))
+      (testing "a bearer token that means nothing changes nothing either"
+        (doseq [path read-paths]
+          (is (= 200 (:status (t/GET-bearer app path "not-even-a-jwt")))))))))

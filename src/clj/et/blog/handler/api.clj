@@ -7,8 +7,11 @@
 
   The docstrings are the API documentation: GET /api/describe hands them out, and
   each one opens with the `METHOD /path` it answers."
+  ;; The notes namespaces are required for their side effect on `find-ns` below:
+  ;; describe walks them, so they must be loaded whenever describe can be called.
   (:require [et.blog.handler.common :as c]
             [et.blog.handler.visibility :as vis]
+            [et.blog.handler.notes-users]
             [et.blog.db :as db]))
 
 ;; The API has no auth surface at all, so this is the only reader it ever serves
@@ -75,7 +78,8 @@
   "Namespaces whose public vars back API routes. GET /api/describe walks these to
   enumerate the surface from var metadata, so a handler's docstring *is* its
   documentation."
-  '[et.blog.handler.api])
+  '[et.blog.handler.api
+    et.blog.handler.notes-users])
 
 (def ^:private route-doc-re
   "Route handlers document themselves as `METHOD /path — explanation`. Matching on

@@ -46,11 +46,34 @@
    (let [req (-> (mock/request :post path) (mock/body params))]
      (app (if token (mock/header req "cookie" (str "token=" token)) req)))))
 
+;; The API is spoken to over JSON with a bearer token, the way plurama's
+;; app-client and plurama-cli speak to it — never with the login cookie.
+(defn GET-bearer [app path bearer]
+  (app (cond-> (mock/request :get path)
+         bearer (mock/header "authorization" (str "Bearer " bearer)))))
+
+(defn POST-json
+  ([app path body] (POST-json app path body nil))
+  ([app path body bearer]
+   (app (cond-> (-> (mock/request :post path) (mock/json-body body))
+          bearer (mock/header "authorization" (str "Bearer " bearer))))))
+
+(defn POST-json-cookie [app path body token]
+  (app (-> (mock/request :post path)
+           (mock/json-body body)
+           (mock/header "cookie" (str "token=" token)))))
+
 (defn parse [response]
   (-> (:body response) hc/parse hc/as-hickory))
 
 (defn json-body [response]
   (json/parse-string (:body response) true))
+
+(defn notes-token
+  "Log a notes user in over the documented API contract and return its token."
+  [app username password]
+  (:token (json-body (POST-json app "/api/auth/login"
+                       {:username username :password password}))))
 
 (defn text-of [node]
   (cond
