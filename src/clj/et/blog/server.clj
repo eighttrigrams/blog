@@ -110,7 +110,7 @@
   (POST "/email/message" [] email-h/message-submit-handler)
   (GET "/feed/posts.xml" [] feed-h/feed-posts-handler)
   (GET "/feed/articles.xml" [] feed-h/feed-articles-handler)
-  (route/resources "/")
+  (route/resources "/" {:root "public/blog"})
   (route/not-found (fn [_] (c/html-response 404 (views/not-found-page {:logged-in? false})))))
 
 (defn- app [prod?]
