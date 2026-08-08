@@ -695,7 +695,14 @@ function mark(ok){while(flash.firstChild)flash.removeChild(flash.firstChild);
 function save(){var fd=new FormData(form);
   fd.set('content',zen.value);
   fd.set('no-redirect','1');
-  fetch(form.action,{method:'POST',body:new URLSearchParams(fd)})
+  /* Submitting a form normalizes textarea newlines to CRLF, FormData does not.
+     Without doing it by hand an in-between save would rewrite the line endings
+     of every multiline field, and the next version bump would see a change
+     nobody made and act on it. (Keep the button labels out of this comment:
+     one edit-page test greps the body for them.) */
+  var body=new URLSearchParams();
+  fd.forEach(function(v,k){body.append(k,String(v).replace(/\\r\\n|\\r|\\n/g,'\\r\\n'));});
+  fetch(form.action,{method:'POST',body:body})
     .then(function(r){mark(r.status===204);})
     .catch(function(){mark(false);});}
 openBtn.addEventListener('click',open);
