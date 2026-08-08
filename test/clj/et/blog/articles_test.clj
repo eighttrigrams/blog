@@ -1,5 +1,6 @@
 (ns et.blog.articles-test
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [hickory.select :as hs]
             [et.blog.test-support :as t]))
@@ -419,7 +420,8 @@
             html (t/parse resp)
             button (t/select-one html (hs/id "zen-open"))
             overlay (t/select-one html (hs/id "zen-overlay"))
-            zen-textarea (t/select-one html (hs/id "zen-content"))]
+            mount (t/select-one html (hs/id "zen-content"))
+            scripts (map #(get-in % [:attrs :src]) (t/select-all html (hs/tag :script)))]
         (is (= 200 (:status resp)))
         (is (str/includes? (:body (t/GET app "/article/drafts" token)) "Zen")
             "the article under test is a draft, so Zen is not gated on publication")
@@ -432,10 +434,22 @@
             "hidden until opened")
         (is (empty? (t/select-all html (hs/descendant (hs/tag :form) (hs/id "zen-overlay"))))
             "outside the form, so nothing in it can submit")
-        (is (some? zen-textarea))
-        (is (nil? (get-in zen-textarea [:attrs :name]))
-            "an unnamed control is never serialized")
-        (is (some? (t/select-one html (hs/id "zen-close"))) "the X that is the only way out")))
+        ;; The writing surface is a CodeMirror view now. What used to be carried
+        ;; by "a textarea with no name" is carried by there being no form control
+        ;; in there at all: a div holds nothing that could be serialized.
+        (is (some? mount) "the editor's mount element")
+        (is (= :div (:tag mount)) "a mount element, not a form control")
+        (is (empty? (t/select-all html (hs/descendant (hs/id "zen-overlay")
+                                         (hs/or (hs/tag :textarea) (hs/tag :input) (hs/tag :select)))))
+            "nothing in the overlay can be submitted, wherever it ends up")
+        (is (some? (t/select-one html (hs/id "zen-close"))) "the X that is the only way out")
+        (testing "the editor's scripts are loaded"
+          (is (some #{"/vendor/codemirror/codemirror.js"} scripts) "the CodeMirror bundle")
+          (is (some #{"/js/zen-motions.js"} scripts) "the motions")
+          (is (some #{"/js/zen.js"} scripts) "the Zen wiring")
+          (doseq [src ["/vendor/codemirror/codemirror.js" "/js/zen-motions.js" "/js/zen.js"]]
+            (is (some? (io/resource (str "public/blog" src)))
+                (str src " must exist on the classpath, not just in the markup"))))))
     (testing "a published article's edit page renders them just the same"
       (let [id (t/create-and-publish! app token
                  {"title" "Published Zen" "content" "body"} "Announce")
@@ -448,4 +462,6 @@
         (is (= 200 (:status resp)))
         (is (nil? (t/select-one html (hs/id "zen-open")))
             "a new article has no id, so an in-between save has nowhere to write")
-        (is (nil? (t/select-one html (hs/id "zen-overlay"))))))))
+        (is (nil? (t/select-one html (hs/id "zen-overlay"))))
+        (is (not (str/includes? (:body resp) "codemirror.js"))
+            "and it does not pay 270KB for an editor it cannot open")))))

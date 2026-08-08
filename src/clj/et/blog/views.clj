@@ -140,8 +140,10 @@
            the em-dash keep floating above it and stay reachable while writing. */
         #zen-overlay { position: fixed; inset: 0; background: #fff; z-index: 90; }
         #zen-column { max-width: 728px; height: 100%; margin: 0 auto; padding: 3.5rem 1.5rem 1.5rem; display: flex; }
-        #zen-content { flex: 1; min-height: 0; padding: 0; border: none; border-radius: 0; resize: none; font-family: inherit; font-size: 1.125rem; line-height: 1.8; color: inherit; background: transparent; }
-        #zen-content:focus { outline: none; border: none; }
+        /* The mount only sizes the editor; the prose styling lives in the view's
+           own theme in zen.js, which is where CodeMirror will honour it. */
+        #zen-content { flex: 1; min-width: 0; min-height: 0; }
+        #zen-content .cm-editor { height: 100%; }
         #zen-close { position: fixed; top: 0.25rem; left: 0.75rem; z-index: 91; padding: 0; background: none; border: none; font-family: inherit; font-size: 2.75rem; line-height: 1; color: rgba(0,0,0,0.25); cursor: pointer; }
         #zen-close:hover { color: #FD5353; }
         /* The save mark, after tracker's #save-flash / .save-flash-mark. 10000
@@ -658,7 +660,9 @@
           [:div#zen-overlay {:style "display: none;"}
            [:button#zen-close {:type "button" :title "Leave Zen"} "\u00D7"]
            [:div#zen-column
-            [:textarea#zen-content]]]
+            ;; The CodeMirror mount. A div, so there is nothing here that could
+            ;; be serialized even if it were inside the form.
+            [:div#zen-content]]]
           [:div#save-flash]))
       [:div.symbol-palette
        [:button {:type "button" :data-symbol "\u201C" :title "Opening double quote"} "\u201C"]
@@ -667,7 +671,13 @@
        [:button {:type "button" :data-symbol "\u2019" :title "Closing single quote"} "\u2019"]
        [:button {:type "button" :data-symbol "\u2014" :title "Em-dash"} "\u2014"]]
       [:script (h/raw "(function(){var last=null;document.querySelectorAll('textarea').forEach(function(t){t.addEventListener('focus',function(){last=t;});});document.querySelectorAll('.symbol-palette button').forEach(function(b){b.addEventListener('mousedown',function(e){e.preventDefault();});b.addEventListener('click',function(){if(!last)return;var s=b.getAttribute('data-symbol');var start=last.selectionStart,end=last.selectionEnd,v=last.value;last.value=v.slice(0,start)+s+v.slice(end);last.selectionStart=last.selectionEnd=start+s.length;last.focus();});});})();")]
-      [:script {:src "/js/zen.js"}])))
+      ;; Only where Zen exists: the bundle is 270KB and a new article has no Zen.
+      ;; Kept out of `layout` for the same reason - the public pages never need it.
+      (when-not new?
+        (list
+          [:script {:src "/vendor/codemirror/codemirror.js"}]
+          [:script {:src "/js/zen-motions.js"}]
+          [:script {:src "/js/zen.js"}])))))
 
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}
