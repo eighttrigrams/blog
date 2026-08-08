@@ -133,6 +133,23 @@
         .symbol-palette button { width: 2rem; height: 2rem; padding: 0; background: #fff; border: 1px solid rgba(0,0,0,0.8); border-radius: 2px; font-family: Spectral, Georgia, serif; font-size: 1.125rem; color: #000; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; }
         .symbol-palette button:hover { background: rgba(0,0,0,0.05); }
         @media (max-width: 900px) { .symbol-palette { display: none; } }
+        .btn-zen { background: rgba(0,0,0,0.55); }
+        .btn-zen:hover { background: rgba(0,0,0,0.7); }
+        /* Zen: a full-viewport writing surface for the Content field alone. The
+           z-index stays under .symbol-palette (100) on purpose, so the quotes and
+           the em-dash keep floating above it and stay reachable while writing. */
+        #zen-overlay { position: fixed; inset: 0; background: #fff; z-index: 90; }
+        #zen-column { max-width: 728px; height: 100%; margin: 0 auto; padding: 3.5rem 1.5rem 1.5rem; display: flex; }
+        #zen-content { flex: 1; min-height: 0; padding: 0; border: none; border-radius: 0; resize: none; font-family: inherit; font-size: 1.125rem; line-height: 1.8; color: inherit; background: transparent; }
+        #zen-content:focus { outline: none; border: none; }
+        #zen-close { position: fixed; top: 0.25rem; left: 0.75rem; z-index: 91; padding: 0; background: none; border: none; font-family: inherit; font-size: 2.75rem; line-height: 1; color: rgba(0,0,0,0.25); cursor: pointer; }
+        #zen-close:hover { color: #FD5353; }
+        /* The save mark, after tracker's #save-flash / .save-flash-mark. 10000
+           carries it above the overlay. */
+        #save-flash { position: fixed; top: 10px; left: 0; right: 0; display: flex; justify-content: center; z-index: 10000; pointer-events: none; }
+        .save-flash-mark { padding: 2px 16px; border-radius: 999px; background: rgba(52,199,89,0.18); color: #34c759; font-size: 1.9em; font-weight: 700; line-height: 1.3; text-shadow: 0 0 10px rgba(52,199,89,0.9); box-shadow: 0 0 12px rgba(52,199,89,0.6), 0 0 28px rgba(52,199,89,0.35); animation: fade-in-out 1.5s ease forwards; }
+        .save-flash-mark.failed { background: rgba(220,53,69,0.18); color: #dc3545; text-shadow: 0 0 10px rgba(220,53,69,0.9); box-shadow: 0 0 12px rgba(220,53,69,0.6), 0 0 28px rgba(220,53,69,0.35); }
+        @keyframes fade-in-out { 0% { opacity: 0; transform: translateY(-10px); } 10% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
         @media (max-width: 600px) {
           .article-row { grid-template-columns: 1fr; grid-template-rows: auto; }
           .article-row .article-version-info { grid-column: 1; grid-row: 1; }
@@ -593,7 +610,11 @@
                     (not version-published?))
            [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"} "Publish"])
          (when-not new?
-           [:a.btn.btn-small.btn-danger {:href (str "/article/" (:article_id article) "/delete")} "Delete"])]]
+           [:a.btn.btn-small.btn-danger {:href (str "/article/" (:article_id article) "/delete")} "Delete"])
+         ;; Same guard as Delete: an id must exist for cmd+9 to have somewhere to
+         ;; write. :type "button" because a bare button in a form submits it.
+         (when-not new?
+           [:button#zen-open.btn.btn-zen {:type "button"} "Zen"])]]
        [:div.form-group
         [:label {:for "title"} "Title"]
         [:input {:type "text" :name "title" :id "title" :value (or (:title article) "") :required true}]]
@@ -628,13 +649,64 @@
           [:summary "Post content (required for publishing) - consider an article abstract"]
           [:div.form-group
            [:textarea {:name "post-content" :id "post-content"} (or post-content "")]]])]
+      ;; Outside the <form> on purpose: nothing in here can be submitted, and the
+      ;; textarea carries no name either, so it is never serialized. It has to be
+      ;; in the DOM before the symbol-palette script below runs, which is what
+      ;; lets the palette insert into it for free.
+      (when-not new?
+        (list
+          [:div#zen-overlay {:style "display: none;"}
+           [:button#zen-close {:type "button" :title "Leave Zen"} "\u00D7"]
+           [:div#zen-column
+            [:textarea#zen-content]]]
+          [:div#save-flash]))
       [:div.symbol-palette
        [:button {:type "button" :data-symbol "\u201C" :title "Opening double quote"} "\u201C"]
        [:button {:type "button" :data-symbol "\u201D" :title "Closing double quote"} "\u201D"]
        [:button {:type "button" :data-symbol "\u2018" :title "Opening single quote"} "\u2018"]
        [:button {:type "button" :data-symbol "\u2019" :title "Closing single quote"} "\u2019"]
        [:button {:type "button" :data-symbol "\u2014" :title "Em-dash"} "\u2014"]]
-      [:script (h/raw "(function(){var last=null;document.querySelectorAll('textarea').forEach(function(t){t.addEventListener('focus',function(){last=t;});});document.querySelectorAll('.symbol-palette button').forEach(function(b){b.addEventListener('mousedown',function(e){e.preventDefault();});b.addEventListener('click',function(){if(!last)return;var s=b.getAttribute('data-symbol');var start=last.selectionStart,end=last.selectionEnd,v=last.value;last.value=v.slice(0,start)+s+v.slice(end);last.selectionStart=last.selectionEnd=start+s.length;last.focus();});});})();")])))
+      [:script (h/raw "(function(){var last=null;document.querySelectorAll('textarea').forEach(function(t){t.addEventListener('focus',function(){last=t;});});document.querySelectorAll('.symbol-palette button').forEach(function(b){b.addEventListener('mousedown',function(e){e.preventDefault();});b.addEventListener('click',function(){if(!last)return;var s=b.getAttribute('data-symbol');var start=last.selectionStart,end=last.selectionEnd,v=last.value;last.value=v.slice(0,start)+s+v.slice(end);last.selectionStart=last.selectionEnd=start+s.length;last.focus();});});})();")]
+      [:script (h/raw "(function(){
+var openBtn=document.getElementById('zen-open');
+if(!openBtn)return;
+var overlay=document.getElementById('zen-overlay'),
+    zen=document.getElementById('zen-content'),
+    content=document.getElementById('content'),
+    form=content.form,
+    flash=document.getElementById('save-flash');
+function carry(from,to){to.value=from.value;to.selectionStart=from.selectionStart;to.selectionEnd=from.selectionEnd;}
+function isOpen(){return overlay.style.display!=='none';}
+function open(){carry(content,zen);overlay.style.display='block';document.body.style.overflow='hidden';zen.focus();}
+/* The palette writes .value directly and fires no input event, so zen is read
+   at the two moments that matter - on save and here - rather than synced while
+   typing. Focusing #content also re-points the palette's own 'last' at the
+   real field, so a symbol clicked after closing lands somewhere visible. */
+function close(){carry(zen,content);overlay.style.display='none';document.body.style.overflow='';content.focus();}
+/* A fresh node, so a second save restarts the animation instead of being swallowed. */
+function mark(ok){while(flash.firstChild)flash.removeChild(flash.firstChild);
+  var s=document.createElement('span');
+  s.className='save-flash-mark'+(ok?'':' failed');
+  s.textContent=ok?'✓':'✗';
+  flash.appendChild(s);}
+/* FormData leaves out submit buttons that were not clicked, so publish and
+   save-version stay out of an in-between save. Only 204 is success: a stale
+   session answers with a redirect that fetch follows to a 200 login page. */
+function save(){var fd=new FormData(form);
+  fd.set('content',zen.value);
+  fd.set('no-redirect','1');
+  fetch(form.action,{method:'POST',body:new URLSearchParams(fd)})
+    .then(function(r){mark(r.status===204);})
+    .catch(function(){mark(false);});}
+openBtn.addEventListener('click',open);
+document.getElementById('zen-close').addEventListener('click',close);
+/* No Escape handler on purpose: the X is the only way out, and a stray Escape
+   while writing must not throw you out. */
+document.addEventListener('keydown',function(e){
+  if(!isOpen())return;
+  if(e.metaKey&&e.key==='9'){e.preventDefault();save();}
+});
+})();")])))
 
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}

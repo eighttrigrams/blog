@@ -342,3 +342,110 @@
         resp (t/GET app "/article/999")]
     (is (= 404 (:status resp)))
     (is (str/includes? (:body resp) "Not Found"))))
+
+;; The in-between save that Zen's cmd+9 uses. It is the plain update, with the
+;; response envelope swapped for one a fetch can read — never a version bump.
+
+(deftest no-redirect-save-answers-204-and-keeps-the-version
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "Zen" "content" "v1 content"} "Announce")
+    (Thread/sleep 1100)
+    (let [resp (t/POST app "/article/1"
+                 (t/article-params {"title" "Zen" "content" "written in zen"
+                                    "no-redirect" "1"})
+                 token)]
+      (is (= 204 (:status resp)) "success is 204, the one status the page trusts")
+      (is (str/blank? (str (:body resp))) "204 carries no body")
+      (is (nil? (t/redirect-location resp)) "nothing for fetch to follow"))
+    (testing "the new content is in the DB"
+      (let [resp (t/GET app "/article/1" token)]
+        (is (str/includes? (:body resp) "written in zen"))
+        (is (not (str/includes? (:body resp) "v1 content")))))
+    (testing "the version is unchanged"
+      (is (= 200 (:status (t/GET app "/article/1/version/1"))))
+      (is (= 404 (:status (t/GET app "/article/1/version/2")))
+          "an in-between save must not bump a version"))))
+
+(deftest no-redirect-save-refuses-a-blank-title-in-plain-text
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/POST app "/article"
+      (t/article-params {"title" "Zen" "content" "kept content"})
+      token)
+    (Thread/sleep 1100)
+    (let [resp (t/POST app "/article/1"
+                 (t/article-params {"title" "   " "content" "should not land"
+                                    "no-redirect" "1"})
+                 token)]
+      (is (= 400 (:status resp)))
+      (is (not (str/includes? (str (:body resp)) "<html"))
+          "a refusal is a short reason, not the whole edit page")
+      (is (str/includes? (str (get-in resp [:headers "Content-Type"])) "text/plain")))
+    (testing "the old content is untouched"
+      (let [resp (t/GET app "/article/1/edit" token)]
+        (is (str/includes? (:body resp) "kept content"))
+        (is (not (str/includes? (:body resp) "should not land")))))))
+
+(deftest no-redirect-save-without-a-token-is-not-204
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/POST app "/article"
+      (t/article-params {"title" "Zen" "content" "kept content"})
+      token)
+    (Thread/sleep 1100)
+    (let [resp (t/POST app "/article/1"
+                 (t/article-params {"title" "Zen" "content" "sneaked in"
+                                    "no-redirect" "1"}))]
+      (is (not= 204 (:status resp))
+          "a stale session must read as failure, so the page can show the red X"))
+    (testing "nothing was written"
+      (let [resp (t/GET app "/article/1/edit" token)]
+        (is (str/includes? (:body resp) "kept content"))
+        (is (not (str/includes? (:body resp) "sneaked in")))))))
+
+;; The guard is "has an id", not "is published": a draft is an existing article
+;; at version 0, so it gets Zen exactly the way it gets Delete.
+
+(deftest edit-page-offers-zen-only-for-an-existing-article
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/POST app "/article"
+      (t/article-params {"title" "Zen" "content" "body text"})
+      token)
+    (testing "a draft's edit page renders the button and the overlay"
+      (let [resp (t/GET app "/article/1/edit" token)
+            html (t/parse resp)
+            button (t/select-one html (hs/id "zen-open"))
+            overlay (t/select-one html (hs/id "zen-overlay"))
+            zen-textarea (t/select-one html (hs/id "zen-content"))]
+        (is (= 200 (:status resp)))
+        (is (str/includes? (:body (t/GET app "/article/drafts" token)) "Zen")
+            "the article under test is a draft, so Zen is not gated on publication")
+        (is (some? button) "a fourth button in .edit-actions")
+        (is (= "Zen" (t/text-of button)))
+        (is (= "button" (get-in button [:attrs :type]))
+            "a submit button sitting in the form would post the article")
+        (is (some? overlay) "the overlay is server-rendered")
+        (is (str/includes? (str (get-in overlay [:attrs :style])) "display: none")
+            "hidden until opened")
+        (is (empty? (t/select-all html (hs/descendant (hs/tag :form) (hs/id "zen-overlay"))))
+            "outside the form, so nothing in it can submit")
+        (is (some? zen-textarea))
+        (is (nil? (get-in zen-textarea [:attrs :name]))
+            "an unnamed control is never serialized")
+        (is (some? (t/select-one html (hs/id "zen-close"))) "the X that is the only way out")))
+    (testing "a published article's edit page renders them just the same"
+      (let [id (t/create-and-publish! app token
+                 {"title" "Published Zen" "content" "body"} "Announce")
+            html (t/parse (t/GET app (str "/article/" id "/edit") token))]
+        (is (some? (t/select-one html (hs/id "zen-open"))))
+        (is (some? (t/select-one html (hs/id "zen-overlay"))))))
+    (testing "a new article offers neither"
+      (let [resp (t/GET app "/article/new" token)
+            html (t/parse resp)]
+        (is (= 200 (:status resp)))
+        (is (nil? (t/select-one html (hs/id "zen-open")))
+            "a new article has no id, so an in-between save has nowhere to write")
+        (is (nil? (t/select-one html (hs/id "zen-overlay"))))))))

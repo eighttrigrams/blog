@@ -80,6 +80,11 @@
    :headers {"Content-Type" "text/html; charset=utf-8"}
    :body body})
 
+(defn text-response [status body]
+  {:status status
+   :headers {"Content-Type" "text/plain; charset=utf-8"}
+   :body body})
+
 (defn redirect [url]
   {:status 302 :headers {"Location" url}})
 

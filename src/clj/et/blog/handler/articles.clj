@@ -106,35 +106,46 @@
             post-content (str/trim (or (get-in req [:form-params "post-content"]) ""))
             publish? (some? (get-in req [:form-params "publish"]))
             save-version? (some? (get-in req [:form-params "save-version"]))
+            ;; An in-between save (Zen's cmd+9) posts the same form over fetch,
+            ;; and asks for an envelope a fetch can read instead of the edit page.
+            ;; It changes the response only — validation and the write below are
+            ;; the very same ones the form post goes through.
+            no-redirect? (some? (get-in req [:form-params "no-redirect"]))
+            refuse (fn [reason page-fn]
+                     (if no-redirect?
+                       (c/text-response 400 reason)
+                       (c/html-response 400 (page-fn))))
             skip-post? (= id 36)
             current-version (:version (db/get-article (c/ensure-ds) id {}))
             published? (when current-version (db/version-published? (c/ensure-ds) id current-version))
             article {:article_id id :version current-version :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract :topics topics}]
         (cond
           (str/blank? title)
-          (c/html-response 400
-            (views/edit-page {:article article :logged-in? true :version-published? published?}))
+          (refuse "Title is required."
+            #(views/edit-page {:article article :logged-in? true :version-published? published?}))
 
           (and publish? (not skip-post?) (str/blank? post-content))
-          (c/html-response 400
-            (views/edit-page {:article article :logged-in? true :version-published? published?
-                              :error "Post content is required when publishing."
-                              :post-content post-content}))
+          (refuse "Post content is required when publishing."
+            #(views/edit-page {:article article :logged-in? true :version-published? published?
+                               :error "Post content is required when publishing."
+                               :post-content post-content}))
 
           (and publish? (not skip-post?)
                (or (zero? current-version) published?))
-          (c/html-response 400
-            (views/edit-page {:article article :logged-in? true :version-published? published?
-                              :error (if (zero? current-version)
-                                       "Bump to a new version before publishing."
-                                       "This version has already been published.")
-                              :post-content post-content}))
+          (refuse (if (zero? current-version)
+                    "Bump to a new version before publishing."
+                    "This version has already been published.")
+            #(views/edit-page {:article article :logged-in? true :version-published? published?
+                               :error (if (zero? current-version)
+                                        "Bump to a new version before publishing."
+                                        "This version has already been published.")
+                               :post-content post-content}))
 
           (and save-version? (pos? current-version) (not published?))
-          (c/html-response 400
-            (views/edit-page {:article article :logged-in? true :version-published? published?
-                              :error "Publish the current version before bumping to a new one."
-                              :post-content post-content}))
+          (refuse "Publish the current version before bumping to a new one."
+            #(views/edit-page {:article article :logged-in? true :version-published? published?
+                               :error "Publish the current version before bumping to a new one."
+                               :post-content post-content}))
 
           :else
           (do
@@ -146,7 +157,9 @@
                 (let [subscribers (db/list-email-subscribers (c/ensure-ds))
                       base (c/site-url req)]
                   (mail/send-article-notification! subscribers title subtitle post-content (str base "/article/" id)))))
-            (c/redirect (str "/article/" id))))))))
+            (if no-redirect?
+              {:status 204}
+              (c/redirect (str "/article/" id)))))))))
 
 (defn confirm-delete-article-handler [req]
   (c/require-login req
