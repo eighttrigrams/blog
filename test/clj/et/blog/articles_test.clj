@@ -445,9 +445,14 @@
         (is (some? (t/select-one html (hs/id "zen-close"))) "the X that is the only way out")
         (testing "the editor's scripts are loaded"
           (is (some #{"/vendor/codemirror/codemirror.js"} scripts) "the CodeMirror bundle")
-          (is (some #{"/js/zen-motions.js"} scripts) "the motions")
+          (is (some #{"/js/editors.js"} scripts) "what mounts the editors on the fields")
           (is (some #{"/js/zen.js"} scripts) "the Zen wiring")
-          (doseq [src ["/vendor/codemirror/codemirror.js" "/js/zen-motions.js" "/js/zen.js"]]
+          ;; The motions used to be a script of blog's own here. They are the
+          ;; library's now - keyboard-wizardry/codemirror - and reach the page
+          ;; inside the vendored bundle, so there is no third file to check.
+          (is (not-any? #{"/js/zen-motions.js"} scripts)
+              "the motions come in through the bundle, not as a file of blog's")
+          (doseq [src ["/vendor/codemirror/codemirror.js" "/js/editors.js" "/js/zen.js"]]
             (is (some? (io/resource (str "public/blog" src)))
                 (str src " must exist on the classpath, not just in the markup"))))))
     (testing "a published article's edit page renders them just the same"
@@ -456,12 +461,16 @@
             html (t/parse (t/GET app (str "/article/" id "/edit") token))]
         (is (some? (t/select-one html (hs/id "zen-open"))))
         (is (some? (t/select-one html (hs/id "zen-overlay"))))))
-    (testing "a new article offers neither"
+    (testing "a new article has the editors but no Zen"
       (let [resp (t/GET app "/article/new" token)
-            html (t/parse resp)]
+            html (t/parse resp)
+            scripts (map #(get-in % [:attrs :src]) (t/select-all html (hs/tag :script)))]
         (is (= 200 (:status resp)))
         (is (nil? (t/select-one html (hs/id "zen-open")))
             "a new article has no id, so an in-between save has nowhere to write")
         (is (nil? (t/select-one html (hs/id "zen-overlay"))))
-        (is (not (str/includes? (:body resp) "codemirror.js"))
-            "and it does not pay 270KB for an editor it cannot open")))))
+        (is (not-any? #{"/js/zen.js"} scripts) "and so no Zen wiring either")
+        ;; The 270KB is paid here, unlike before: the fields on this page are
+        ;; editors whether or not there is a Zen to open from them.
+        (is (some #{"/vendor/codemirror/codemirror.js"} scripts) "the CodeMirror bundle")
+        (is (some #{"/js/editors.js"} scripts) "and what mounts the editors")))))

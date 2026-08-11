@@ -184,6 +184,20 @@
             [:a {:href "/logout"} "Logout"]))]]
       body]])))
 
+;; What turns the textareas marked `:data-editor "1"` on a page into CodeMirror
+;; editors with Daniel's IJKL bindings on them. Two tags, because the bundle is
+;; 270KB: it is asked for by the pages that write, and by no others. That is also
+;; why the marker exists at all rather than editors.js taking every textarea it
+;; can find - the message box on /email and the comment and reply forms belong to
+;; visitors, who did not ask for this keymap and should not download it.
+;;
+;; Kept out of `layout` deliberately, so adding a page never turns it on by
+;; accident. A page that wants it says so, in both places.
+(defn- editor-scripts []
+  (list
+    [:script {:src "/vendor/codemirror/codemirror.js"}]
+    [:script {:src "/js/editors.js"}]))
+
 (defn home-page [{:keys [articles logged-in? topic]}]
   (layout {:title nil :logged-in? logged-in?}
     [:h1 [:a {:href "/articles" :class "article-list-link"} "Articles"]]
@@ -284,7 +298,8 @@
       [:input {:type "text" :name "title" :id "title" :required true}]]
      [:div.form-group
       [:label {:for "description"} "Description"]
-      [:textarea {:name "description" :id "description" :style "min-height: 100px;"}]]
+      [:textarea {:name "description" :id "description" :data-editor "1"
+                  :style "min-height: 100px;"}]]
      [:button.btn {:type "submit"} "Add Note"]]
     [:div {:style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem;"}
      (if (seq notes)
@@ -302,7 +317,8 @@
             (when-not (str/blank? source) (str " — " source))]
            (when-not (str/blank? description)
              [:p {:style "margin: 0.5rem 0 0 0; white-space: pre-wrap;"} description])])]
-       [:p "The Notes box is empty."])]))
+       [:p "The Notes box is empty."])]
+    (editor-scripts)))
 
 (defn edit-note-page [{:keys [logged-in? note error]}]
   (layout {:title "Edit Note" :logged-in? logged-in?}
@@ -319,8 +335,10 @@
       [:input {:type "text" :name "title" :id "title" :value (or (:title note) "") :required true}]]
      [:div.form-group
       [:label {:for "description"} "Description"]
-      [:textarea {:name "description" :id "description" :style "min-height: 150px;"}
-       (or (:description note) "")]]]))
+      [:textarea {:name "description" :id "description" :data-editor "1"
+                  :style "min-height: 150px;"}
+       (or (:description note) "")]]]
+    (editor-scripts)))
 
 (defn notes-users-page [{:keys [logged-in? notes-users created error]}]
   (layout {:title "Notes users" :logged-in? logged-in?}
@@ -561,10 +579,12 @@
      [:form {:method "POST" :action (str "/comments/" (:id comment) "/delete")}
       [:div.form-group
        [:label {:for "reason"} "Reason (optional)"]
-       [:textarea {:name "reason" :id "reason" :style "min-height: 80px;"}]]
+       [:textarea {:name "reason" :id "reason" :data-editor "1"
+                   :style "min-height: 80px;"}]]
       [:div.confirm-actions
        [:button.btn.btn-danger {:type "submit"} "Delete"]
-       [:a.btn.btn-cancel {:href (str "/article/" (:article_id comment) "/version/" (:article_version comment))} "Cancel"]]]]))
+       [:a.btn.btn-cancel {:href (str "/article/" (:article_id comment) "/version/" (:article_version comment))} "Cancel"]]]]
+    (editor-scripts)))
 
 (defn confirm-delete-reply-page [{:keys [reply comment logged-in?]}]
   (layout {:title "Delete Reply" :logged-in? logged-in?}
@@ -575,11 +595,13 @@
      [:form {:method "POST" :action (str "/replies/" (:id reply) "/delete")}
       [:div.form-group
        [:label {:for "reason"} "Reason (optional)"]
-       [:textarea {:name "reason" :id "reason" :style "min-height: 80px;"}]]
+       [:textarea {:name "reason" :id "reason" :data-editor "1"
+                   :style "min-height: 80px;"}]]
       [:div.confirm-actions
        [:button.btn.btn-danger {:type "submit"} "Delete"]
        [:a.btn.btn-cancel {:href (str "/article/" (:article_id comment) "/version/" (:article_version comment)
-                                      "/comment/" (:id comment))} "Cancel"]]]]))
+                                      "/comment/" (:id comment))} "Cancel"]]]]
+    (editor-scripts)))
 
 (defn login-page [{:keys [error]}]
   (layout {:title "Login"}
@@ -631,26 +653,27 @@
         [:input {:type "text" :name "preview-image" :id "preview-image" :value (or (:preview_image article) "")}]]
        [:div.form-group
         [:label {:for "abstract"} "Abstract"]
-        [:textarea {:name "abstract" :id "abstract" :style "min-height: 80px;"} (or (:abstract article) "")]]
+        [:textarea {:name "abstract" :id "abstract" :data-editor "1"
+                    :style "min-height: 80px;"} (or (:abstract article) "")]]
        [:div.form-group
         [:label {:for "topics"} "Categories"]
         [:input {:type "text" :name "topics" :id "topics" :value (or (:topics article) "")}]]
        [:div.form-group
         [:label {:for "content"} "Content"]
-        [:textarea {:name "content" :id "content"} (or (:content article) "")]]
+        [:textarea {:name "content" :id "content" :data-editor "1"} (or (:content article) "")]]
        [:div.form-group
         [:label {:for "footnotes"} "Footnotes"]
-        [:textarea {:name "footnotes" :id "footnotes"} (or (:footnotes article) "")]]
+        [:textarea {:name "footnotes" :id "footnotes" :data-editor "1"} (or (:footnotes article) "")]]
        [:div.form-group
         [:label {:for "addenda"} "Addenda"]
-        [:textarea {:name "addenda" :id "addenda"} (or (:addenda article) "")]]
+        [:textarea {:name "addenda" :id "addenda" :data-editor "1"} (or (:addenda article) "")]]
        (when (and (not new?)
                   (pos? (or (:version article) 0))
                   (not version-published?))
          [:details (when error {:open true})
           [:summary "Post content (required for publishing) - consider an article abstract"]
           [:div.form-group
-           [:textarea {:name "post-content" :id "post-content"} (or post-content "")]]])]
+           [:textarea {:name "post-content" :id "post-content" :data-editor "1"} (or post-content "")]]])]
       ;; Outside the <form> on purpose: nothing in here can be submitted, and the
       ;; textarea carries no name either, so it is never serialized. It has to be
       ;; in the DOM before the symbol-palette script below runs, which is what
@@ -671,13 +694,12 @@
        [:button {:type "button" :data-symbol "\u2019" :title "Closing single quote"} "\u2019"]
        [:button {:type "button" :data-symbol "\u2014" :title "Em-dash"} "\u2014"]]
       [:script (h/raw "(function(){var last=null;document.querySelectorAll('textarea').forEach(function(t){t.addEventListener('focus',function(){last=t;});});document.querySelectorAll('.symbol-palette button').forEach(function(b){b.addEventListener('mousedown',function(e){e.preventDefault();});b.addEventListener('click',function(){if(!last)return;var s=b.getAttribute('data-symbol');var start=last.selectionStart,end=last.selectionEnd,v=last.value;last.value=v.slice(0,start)+s+v.slice(end);last.selectionStart=last.selectionEnd=start+s.length;last.focus();});});})();")]
-      ;; Only where Zen exists: the bundle is 270KB and a new article has no Zen.
-      ;; Kept out of `layout` for the same reason - the public pages never need it.
+      ;; Every field on this page is an editor, on a new article as much as on an
+      ;; existing one. Zen is the exception rather than the rule now: it needs an
+      ;; id to write cmd+9 saves to, which a new article has not got yet.
+      (editor-scripts)
       (when-not new?
-        (list
-          [:script {:src "/vendor/codemirror/codemirror.js"}]
-          [:script {:src "/js/zen-motions.js"}]
-          [:script {:src "/js/zen.js"}])))))
+        [:script {:src "/js/zen.js"}]))))
 
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}
@@ -773,8 +795,9 @@
         [:input {:type "text" :name "image" :id "image" :value (or (:image post) "")}]]
        [:div.form-group
         [:label {:for "content"} "Content"]
-        [:textarea {:name "content" :id "content"} (or (:content post) "")]]
-      ])))
+        [:textarea {:name "content" :id "content" :data-editor "1"} (or (:content post) "")]]
+      ]
+      (editor-scripts))))
 
 (defn confirm-delete-article-page [{:keys [article logged-in?]}]
   (layout {:title "Delete Article" :logged-in? logged-in?}

@@ -1,14 +1,15 @@
 {
   "name": "blog-zen-editor",
   "private": true,
-  "description": "Bundles CodeMirror 6 into one vendored file for blog's Zen writing mode. Blog has no build step of its own — the artifact is committed, like vendor/hljs.",
+  "description": "Bundles CodeMirror 6 and the IJKL bindings into one vendored file for blog's Zen writing mode. Blog has no build step of its own — the artifact is committed, like vendor/hljs.",
   "scripts": {
     "build": "esbuild codemirror.js --bundle --minify --format=iife --target=es2020 --outfile=../../resources/public/blog/vendor/codemirror/codemirror.js"
   },
   "dependencies": {
     "@codemirror/commands": "6.10.3",
     "@codemirror/state": "6.6.0",
-    "@codemirror/view": "6.43.1"
+    "@codemirror/view": "6.43.1",
+    "@eighttrigrams/kw-codemirror": "file:../../../../eighttrigrams/keyboard-wizardry/codemirror"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

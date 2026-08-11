@@ -6,10 +6,7 @@ restart:
 test:
 	clojure -M:test
 
-.PHONY: test-js
-
-# The Zen editor's markdown motions. node --test needs no packages, which is why
-# these can be tested at all. A glob, not test/js/ - node reads a bare directory
-# as a module to load, not as a tree to scan.
-test-js:
-	node --test "test/js/*_test.js"
+# There is no test-js target any more. The Zen editor's markdown motions moved
+# out to keyboard-wizardry/codemirror, and their tests went with them - `npm test`
+# and `npm run e2e` in that folder. What is left here of Zen is theme and
+# plumbing, which the clj tests cover.

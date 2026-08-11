@@ -43,58 +43,32 @@ function makeView(doc){
 
 /* ---- Daniel's markdown motion scheme --------------------------------- */
 
-/* Keyed on e.code, never e.key: on macOS Option is a compose modifier, so
-   option+j arrives as e.key "∆". An e.key map would fail silently for
-   exactly the two wordwise bindings and look fine everywhere else. */
-function chord(e){
-  var mods=[];
-  if(e.altKey)mods.push('alt');
-  if(e.ctrlKey)mods.push('ctrl');
-  if(e.metaKey)mods.push('meta');
-  if(e.shiftKey)mods.push('shift');
-  return e.code+' '+mods.join('+');
-}
-
-/* A sentence motion as a CodeMirror command: the pure function decides, this
-   only moves the caret there. */
-function motion(fn){
-  return function(view){
-    var target=fn(view.state.doc.toString(),view.state.selection.main.head);
-    view.dispatch({selection:{anchor:target,head:target},scrollIntoView:true});
-    return true;
-  };
-}
-
-function keyCommands(){
-  var c=window.CM6.commands,m=window.ZenMotions;
-  return {
-    'KeyI meta':c.cursorLineUp,
-    'KeyK meta':c.cursorLineDown,
-    'KeyJ meta':c.cursorCharLeft,
-    'KeyL meta':c.cursorCharRight,
-    'KeyJ alt':c.cursorGroupLeft,
-    'KeyL alt':c.cursorGroupRight,
-    'KeyJ ctrl':motion(m.sentenceStart),
-    'KeyL ctrl':motion(m.sentenceEnd)
-  };
-}
-
-/* Capture phase on the editor element, the way tracker's codemirror.cljs does
-   it, so these win before CodeMirror's own keymaps see the event. */
+/* Not blog's any more. The scheme - the eight chords, the sentence motions they
+   move by, and the capture-phase listener that makes them win over CodeMirror's
+   own keymaps - lives in keyboard-wizardry/codemirror, beside the vscode/ and
+   obsidian/ folders of the same scheme, and comes in through the vendored bundle
+   as window.IJKL. It is tested there, in node and in a browser both. Blog keeps
+   what is blog's: the theme, the overlay, the saving. */
 function bindKeys(view){
-  var commands=keyCommands();
-  view.dom.addEventListener('keydown',function(e){
-    var command=commands[chord(e)];
-    if(!command)return;
-    e.preventDefault();
-    e.stopPropagation();
-    command(view);
-  },true);
+  window.IJKL.install(view,window.CM6.commands);
 }
 
 /* ---- opening and closing --------------------------------------------- */
 
 function isOpen(){return overlay.style.display!=='none';}
+
+/* #content is itself an editor now, mounted by editors.js. Zen hands its text
+   back and forth with *that*, not with the textarea underneath it: the textarea
+   is only a mirror of the inline editor's document, so writing to it directly
+   would leave the inline editor showing the text from before Zen was opened, and
+   the next keystroke in it would put that stale text straight back.
+
+   Still written to fall back to the textarea. editors.js does nothing on a page
+   with no marked textareas, and Zen should not be the thing that breaks if this
+   page ever becomes one of those. */
+function inline(){
+  return window.BlogEditors?window.BlogEditors.get('content'):null;
+}
 
 function setCaret(pos){
   var at=Math.max(0,Math.min(pos,view.state.doc.length));
@@ -104,7 +78,9 @@ function setCaret(pos){
 /* The view is built on first open, not at load: CodeMirror measures itself, and
    measuring inside a display:none overlay gives it nothing to measure. */
 function open(){
-  var doc=content.value,caret=content.selectionStart||0;
+  var source=inline(),
+      doc=source?source.state.doc.toString():content.value,
+      caret=source?source.state.selection.main.head:(content.selectionStart||0);
   overlay.style.display='block';
   document.body.style.overflow='hidden';
   if(!view){view=makeView(doc);bindKeys(view);}
@@ -114,18 +90,27 @@ function open(){
 }
 
 /* Read out of the view at the two moments that matter - on save and here -
-   rather than syncing as you type. Focusing #content also re-points the
-   palette's own 'last' at the real field, so a symbol clicked after closing
-   lands somewhere visible. */
+   rather than syncing as you type. The caret comes back out of Zen with the
+   text, so closing leaves you where you were writing. */
 function close(){
   var text=view?view.state.doc.toString():content.value,
-      caret=view?view.state.selection.main.head:0;
-  content.value=text;
+      caret=view?view.state.selection.main.head:0,
+      at=Math.max(0,Math.min(caret,text.length)),
+      target=inline();
   overlay.style.display='none';
   document.body.style.overflow='';
-  content.focus();
-  var at=Math.max(0,Math.min(caret,content.value.length));
-  content.selectionStart=content.selectionEnd=at;
+  if(target){
+    /* Changes and selection in one transaction: an explicit selection is read
+       against the document the transaction produces, not the one it replaced. */
+    target.dispatch({changes:{from:0,to:target.state.doc.length,insert:text},
+                     selection:{anchor:at,head:at},
+                     scrollIntoView:true});
+    target.focus();
+  }else{
+    content.value=text;
+    content.focus();
+    content.selectionStart=content.selectionEnd=at;
+  }
 }
 
 /* ---- the in-between save --------------------------------------------- */
