@@ -6,7 +6,7 @@ if [ ! -f config.edn ]; then
   cat > config.edn << 'EOF'
 {:db {:type :sqlite-file
       :path "data/blog.db"}
- :port 3028
+ :port 3130
  :dangerously-skip-logins? true}
 EOF
 fi
