@@ -5,10 +5,18 @@
 # scripts/start.sh — while the server has listened on config.edn's 3130 since
 # blog joined the plurama umbrella. So it killed nothing, the new JVM died with
 # "Address in use", and the old one carried on serving, which reads exactly like
-# a restart that worked. A pattern cannot go stale the way that literal did, and
-# it is how plurama's own `make stop` does it.
+# a restart that worked.
+#
+# The brackets are not decoration. `pkill -f` matches against whole command
+# lines, and this recipe is itself a command line containing the pattern — so a
+# plain 'et.blog.server' matches the shell running the recipe and can kill it
+# before it ever starts the server. That is not hypothetical: it is what
+# handoffs/blog-scoping-report.md hit with plurama's own `make stop`, and pkill
+# excludes only itself, not its parent. '[e]t.blog.server' as a *regex* does not
+# match the literal text '[e]t.blog.server' in this line, but does match
+# 'et.blog.server' in the JVM's arguments. Verified both ways with pgrep.
 restart:
-	@pkill -f 'et.blog.server' 2>/dev/null; sleep 1 && DEV=true clj -M -m et.blog.server &
+	@pkill -f '[e]t.blog.server' 2>/dev/null; sleep 1 && DEV=true clj -M -m et.blog.server &
 
 test:
 	clojure -M:test
