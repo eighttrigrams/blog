@@ -11,11 +11,26 @@
     (t/POST app "/notes-users" {"name" "notes-user" "password" "pw"} admin)
     [admin (t/notes-token app "notes-user" "pw")]))
 
-(defn- note-texts [app admin]
+(defn- note-texts
+  "What each Note reads as on the page. The body is rendered markdown, so this is
+  the text of the rendered block rather than the stored string — see
+  `stored-text` for the round-trip."
+  [app admin]
   (->> (t/GET app "/notes" admin)
        t/parse
        (#(t/select-all % (hs/class "note-text")))
-       (map t/text-of)))
+       ;; trimmed: the renderer ends a block with a newline, which is markup
+       ;; rather than anything the Note says
+       (map (comp str/trim t/text-of))))
+
+(defn- stored-text
+  "The Note's text as it is stored, read back off its edit form — the one place
+  the page shows it unrendered."
+  [app admin id]
+  (-> (t/GET app (str "/notes/" id "/edit") admin)
+      t/parse
+      (t/select-one (hs/tag :textarea))
+      t/text-of))
 
 (deftest a-notes-user-may-deliver-a-note
   (let [app (t/make-app)
@@ -30,12 +45,12 @@
         (is (str/includes? body "telegram"))))))
 
 (deftest a-note-is-one-text-and-keeps-its-shape
-  (testing "a Note has no title to split off — the newlines it arrives with survive"
+  (testing "a Note has no title to split off — what arrives is what is stored"
     (let [app (t/make-app)
           [admin notes] (notes-credential! app)
           text "First line\n\nand a second paragraph"]
       (is (= 201 (:status (t/POST-json app "/api/notes" {:text text} notes))))
-      (is (= [text] (note-texts app admin))))))
+      (is (= text (stored-text app admin 1))))))
 
 (deftest the-owners-cookie-may-deliver-one-too
   (let [app (t/make-app)
@@ -81,6 +96,33 @@
       (t/POST-json app "/api/notes" {:text "Texted"} notes)
       (is (= ["Texted"] (note-texts app admin))))))
 
+;; A Note is written in the same editor as every other body here and read on the
+;; same page, so it is rendered the same way. This also pins the escaping: the
+;; text arrives from Telegram, and a Note is the one thing on this page written
+;; somewhere other than this page.
+(deftest a-note-is-markdown
+  (let [app (t/make-app)
+        [admin notes] (notes-credential! app)]
+    (t/POST-json app "/api/notes"
+      {:text "**bold** and a [link](https://example.com)\n\n- one\n- two"}
+      notes)
+    (let [body (:body (t/GET app "/notes" admin))]
+      (testing "the marks are rendered, not shown"
+        (is (str/includes? body "<strong>bold</strong>"))
+        (is (str/includes? body "<li>one</li>"))
+        (is (str/includes? body "href=\"https://example.com\""))
+        (is (not (str/includes? body "**bold**"))))
+      (testing "an outside link opens away from the box, as everywhere else here"
+        (is (str/includes? body "rel=\"noopener\""))))
+    (testing "a single newline is still a line break — a Note is often just lines"
+      (t/POST-json app "/api/notes" {:text "one line\nand the next"} notes)
+      (is (str/includes? (:body (t/GET app "/notes" admin)) "<br />")))
+    (testing "and HTML in a Note is shown, never run"
+      (t/POST-json app "/api/notes" {:text "<script>alert(1)</script>"} notes)
+      (let [body (:body (t/GET app "/notes" admin))]
+        (is (not (str/includes? body "<script>alert(1)</script>")))
+        (is (str/includes? body "&lt;script&gt;"))))))
+
 (deftest the-notes-box-is-the-owners-alone
   (let [app (t/make-app)
         [admin notes] (notes-credential! app)]
@@ -98,7 +140,7 @@
     (testing "the writes are guarded too, not just the reads"
       (doseq [[path params] [["/notes" {"text" "Sneaky"}]
                              ["/notes/1" {"text" "Rewritten"}]
-                             ["/notes/1/done" {}]]]
+                             ["/notes/1/delete" {}]]]
         (let [resp (t/POST app path params)]
           (is (= 302 (:status resp)) (str "POST " path " must redirect"))
           (is (= "/login" (t/redirect-location resp)))))
@@ -122,7 +164,7 @@
         [admin notes] (notes-credential! app)]
     (t/POST-json app "/api/notes" {:text "As delivered"} notes)
     (testing "the edit form arrives filled in"
-      (is (str/includes? (:body (t/GET app "/notes/1/edit" admin)) "As delivered")))
+      (is (= "As delivered" (stored-text app admin 1))))
     (let [resp (t/POST app "/notes/1" {"text" "Edited"} admin)]
       (is (= 302 (:status resp)))
       (is (= "/notes" (t/redirect-location resp))))
@@ -136,19 +178,35 @@
       (is (= 404 (:status (t/POST app "/notes/999" {"text" "Ghost"} admin))))
       (is (= 404 (:status (t/GET app "/notes/nonsense/edit" admin)))))))
 
-(deftest a-note-marked-done-leaves-the-box
+(deftest a-deleted-note-is-gone-for-good
   (let [app (t/make-app)
         admin (t/login app)]
     (t/POST app "/notes" {"text" "Keep"} admin)
-    (t/POST app "/notes" {"text" "Finish"} admin)
-    (is (= #{"Keep" "Finish"} (set (note-texts app admin))))
-    (let [id (-> (t/GET app "/notes" admin) :body
-                 (->> (re-find #"/notes/(\d+)/done")) second)]
-      (is (= 302 (:status (t/POST app (str "/notes/" id "/done") {} admin)))))
-    (testing "one of them is gone and the other stayed"
-      (is (= 1 (count (note-texts app admin)))))
-    (testing "an unknown Note cannot be marked done"
-      (is (= 404 (:status (t/POST app "/notes/999/done" {} admin)))))))
+    (t/POST app "/notes" {"text" "Delete me"} admin)
+    (is (= #{"Keep" "Delete me"} (set (note-texts app admin))))
+    (is (= 302 (:status (t/POST app "/notes/2/delete" {} admin))))
+    (testing "the one deleted is gone and the other stayed"
+      (is (= ["Keep"] (note-texts app admin))))
+    (testing "and it is not kept anywhere — the row itself is away, so the id
+              that named it names nothing"
+      (is (= 404 (:status (t/GET app "/notes/2/edit" admin))))
+      (is (= 404 (:status (t/POST app "/notes/2/delete" {} admin)))))
+    (testing "an unknown Note cannot be deleted"
+      (is (= 404 (:status (t/POST app "/notes/999/delete" {} admin)))))))
+
+;; The one click that destroys something, and there is no undo behind it. Blog's
+;; other destructive actions get a confirm *page*; this one is the inline idiom
+;; Publish uses, so the guard is an attribute and this is what says it is there.
+;; That it actually stops the POST is a browser matter — see the report.
+(deftest deleting-asks-first
+  (let [app (t/make-app)
+        admin (t/login app)]
+    (t/POST app "/notes" {"text" "Guarded"} admin)
+    (let [button (-> (t/GET app "/notes" admin) t/parse
+                     (t/select-one (hs/and (hs/tag :button) (hs/class "btn-danger"))))]
+      (is (some? button) "the Delete button is the dangerous one, and says so")
+      (is (str/includes? (get-in button [:attrs :onclick]) "confirm(")
+          "a click must ask before it posts"))))
 
 (deftest an-empty-box-says-so
   (let [app (t/make-app)

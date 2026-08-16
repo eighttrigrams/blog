@@ -1,0 +1,15 @@
+;; A Note is deleted now, not marked done: the button takes the row away and
+;; nothing reads it again. So the flag goes, and the Notes already carrying it
+;; go with it — those are Notes the owner has dismissed, and simply dropping the
+;; column would put every one of them back in his box.
+;;
+;; **This is the one migration here that loses rows, and the down cannot bring
+;; them back.** It restores the column, defaulting every surviving Note to not
+;; done, which is what they are; the dismissed ones are gone. Deleting them is
+;; the point rather than a side effect — see the commit for why that is the
+;; honest reading of "I don't want to keep deleted notes".
+{:id "021-drop-note-done"
+ :up ["DELETE FROM notes WHERE done = 1"
+      "ALTER TABLE notes DROP COLUMN done"]
+ :down ["ALTER TABLE notes ADD COLUMN done INTEGER NOT NULL DEFAULT 0"]
+ :transactions false}

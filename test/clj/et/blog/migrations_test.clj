@@ -135,6 +135,79 @@
           (is (= (inc gone)
                  (:id (first (q conn "SELECT id FROM notes WHERE text = 'new'"))))))))))
 
+;; ---------------------------------------------------------------------------
+;; 021 — a Note is deleted, not marked done
+;;
+;; The only migration here that loses rows. Dropping the flag without dropping
+;; the Notes carrying it would put every dismissed Note back in the box, which
+;; is the one outcome nobody wants; the down cannot bring them back, and that is
+;; the price, not an oversight.
+;; ---------------------------------------------------------------------------
+
+(def ^:private drop-done "021-drop-note-done")
+
+(defn- through-020!
+  [conn store]
+  (migrate-up-to! store collapse)
+  (seed-old-shape! conn)
+  (migrate! store collapse))
+
+(deftest a-dismissed-note-goes-rather-than-coming-back
+  (with-open [conn (fresh-db "blog-mig021-up")]
+    (let [store (ragtime-jdbc/sql-database (jdbc/with-options conn {}))]
+      (through-020! conn store)
+      (is (= [1] (map :id (q conn "SELECT id FROM notes WHERE done = 1")))
+          "the fixture has a Note the owner had marked done")
+      (let [open-before (q conn "SELECT id, text, source, created_at, modified_at FROM notes WHERE done = 0 ORDER BY id")
+            users-before (q conn "SELECT id, name, password_hash, revoked_at, created_at FROM notes_users ORDER BY id")]
+
+        (migrate! store drop-done)
+
+        (testing "the Note that had been dismissed is gone, not un-dismissed"
+          (is (= [2 3 4] (map :id (q conn "SELECT id FROM notes ORDER BY id")))))
+
+        (testing "every Note still in the box came through untouched"
+          (is (= open-before
+                 (q conn "SELECT id, text, source, created_at, modified_at FROM notes ORDER BY id"))))
+
+        (testing "the flag is gone with them"
+          (is (= #{"id" "text" "source" "created_at" "modified_at"}
+                 (set (map :name (q conn "PRAGMA table_info(notes)"))))))
+
+        (testing "notes users are none of this migration's business"
+          (is (= users-before
+                 (q conn "SELECT id, name, password_hash, revoked_at, created_at FROM notes_users ORDER BY id"))))))))
+
+(deftest the-note-id-counter-survives-dropping-the-flag
+  (with-open [conn (fresh-db "blog-mig021-seq")]
+    (let [store (ragtime-jdbc/sql-database (jdbc/with-options conn {}))]
+      (through-020! conn store)
+
+      (migrate! store drop-done)
+
+      (testing "the next Note follows the highest id ever spent, not the highest left"
+        (jdbc/execute! conn ["INSERT INTO notes (text, source) VALUES ('new', 'ui')"])
+        (is (= 5 (:id (first (q conn "SELECT id FROM notes WHERE text = 'new'"))))
+            "id 1 was deleted by the migration and must not be handed out again")))))
+
+(deftest rollback-021-restores-the-flag-but-not-the-rows
+  (with-open [conn (fresh-db "blog-mig021-down")]
+    (let [store (ragtime-jdbc/sql-database (jdbc/with-options conn {}))]
+      (through-020! conn store)
+      (migrate! store drop-done)
+
+      (rollback! store drop-done)
+
+      (testing "the column is back, and every surviving Note is not done — which
+                is what they are"
+        (is (= #{"id" "text" "source" "done" "created_at" "modified_at"}
+               (set (map :name (q conn "PRAGMA table_info(notes)")))))
+        (is (= [0 0 0] (map :done (q conn "SELECT done FROM notes ORDER BY id")))))
+
+      (testing "the dismissed Note is not back, and cannot be — this is the one
+                rollback here that does not undo its migration"
+        (is (empty? (q conn "SELECT id FROM notes WHERE id = 1")))))))
+
 (deftest rollback-splits-the-first-line-back-off
   (with-open [conn (fresh-db "blog-mig020-down")]
     (let [store (ragtime-jdbc/sql-database (jdbc/with-options conn {}))]

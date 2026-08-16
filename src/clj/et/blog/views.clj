@@ -73,7 +73,6 @@
         .post-heading { display: flex; justify-content: space-between; align-items: center; }
         .post-heading h2 { margin: 0; }
         .note-meta { font-size: 0.85rem; font-weight: 400; color: rgba(0,0,0,0.4); }
-        .note-text { margin: 0.5rem 0 0 0; white-space: pre-wrap; }
         .post-permalink { color: #1a0dab; text-decoration: none; }
         .post-permalink:hover { text-decoration: underline; }
         .post-article-link { margin-top: 0.75rem; font-weight: 600; }
@@ -87,6 +86,12 @@
         .article-content blockquote { border-left: 3px solid rgba(0,0,0,0.15); margin: 1rem 0; padding: 0.5rem 1rem; color: rgba(0,0,0,0.6); }
         .article-content code { background: rgba(0,0,0,0.05); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
         .article-content pre code { display: block; padding: 1rem; overflow-x: auto; }
+        /* A Note is markdown like every other body here, so its line breaks are
+           the renderer's job rather than white-space's. It sits closer to its
+           heading than an article's content does, hence the override — which has
+           to come after .article-content to win, both being one class. */
+        .note-text { margin-top: 0.5rem; }
+        .note-text > :first-child { margin-top: 0; }
         .article-section { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; }
         .article-section h3 { font-size: 1rem; font-weight: 600; font-style: italic; color: rgba(0,0,0,0.65); margin-bottom: 0; }
         .footnotes { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
@@ -317,9 +322,15 @@
              (when-not (str/blank? source) (str " — " source))]
             [:div.edit-actions
              [:a.btn.btn-small {:href (str "/notes/" id "/edit")} "Edit"]
-             [:form {:method "POST" :action (str "/notes/" id "/done")}
-              [:button.btn.btn-small.btn-publish {:type "submit"} "Done"]]]]
-           [:p.note-text text]])]
+             [:form {:method "POST" :action (str "/notes/" id "/delete")}
+              ;; Deleting a Note takes the row away — no tombstone, nothing
+              ;; reads it again — so the click asks first. Blog's inline idiom,
+              ;; as on Publish, rather than the confirm page an Article gets.
+              [:button.btn.btn-small.btn-danger
+               {:type "submit"
+                :onclick "return confirm('Delete this Note? It is gone for good.');"}
+               "Delete"]]]]
+           [:div.note-text.article-content (h/raw (render/markdown->html text))]])]
        [:p "The Notes box is empty."])]
     (editor-scripts)))
 

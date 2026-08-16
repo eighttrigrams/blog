@@ -31,7 +31,7 @@
 
 (defn- page-data [opts]
   (merge {:logged-in? true
-          :notes (db/list-open-notes (c/ensure-ds))}
+          :notes (db/list-notes (c/ensure-ds))}
          opts))
 
 (defn notes-page-handler [req]
@@ -76,8 +76,8 @@
           (do (db/update-note! (c/ensure-ds) (:id note) {:text text})
               (c/redirect "/notes")))))))
 
-(defn done-note-handler [req]
+(defn delete-note-handler [req]
   (with-note req
     (fn [note]
-      (db/mark-note-done! (c/ensure-ds) (:id note))
+      (db/delete-note! (c/ensure-ds) (:id note))
       (c/redirect "/notes"))))

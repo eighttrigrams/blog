@@ -601,17 +601,17 @@
       ["INSERT INTO notes (text, source) VALUES (?, ?)"
        text (or source "")])))
 
-(defn list-open-notes [ds]
+(defn list-notes [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
       ["SELECT id, text, source, created_at, modified_at
-        FROM notes WHERE done = 0 ORDER BY created_at DESC"]
+        FROM notes ORDER BY created_at DESC"]
       jdbc-opts)))
 
 (defn get-note [ds id]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      ["SELECT id, text, source, done, created_at, modified_at
+      ["SELECT id, text, source, created_at, modified_at
         FROM notes WHERE id = ?" id]
       jdbc-opts)))
 
@@ -624,12 +624,13 @@
         WHERE id = ?"
        text id])))
 
-(defn mark-note-done! [ds id]
+(defn delete-note!
+  "Take the row away. A Note is not kept once it is deleted — there is no
+  tombstone here as there is for an Article or a Post, and nothing reads one
+  afterwards."
+  [ds id]
   (let [conn (get-conn ds)]
-    (jdbc/execute-one! conn
-      ["UPDATE notes
-        SET done = 1, modified_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE id = ?" id])))
+    (jdbc/execute-one! conn ["DELETE FROM notes WHERE id = ?" id])))
 
 ;; --- Notes users ---
 

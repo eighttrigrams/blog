@@ -100,7 +100,7 @@
   (GET "/notes" [] notes-h/notes-page-handler)
   (POST "/notes" [] notes-h/create-note-handler)
   (GET "/notes/:id/edit" [] notes-h/edit-note-handler)
-  (POST "/notes/:id/done" [] notes-h/done-note-handler)
+  (POST "/notes/:id/delete" [] notes-h/delete-note-handler)
   (POST "/notes/:id" [] notes-h/update-note-handler)
   (GET "/notes-users" [] notes-users-h/notes-users-page-handler)
   (POST "/notes-users" [] notes-users-h/create-notes-user-handler)
