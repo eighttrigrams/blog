@@ -1,0 +1,28 @@
+;; A Note is just text now. Its two old fields join into one — title, a blank
+;; line, then the description, which is how they read on the page anyway — and a
+;; Note that never had a description keeps its one line with nothing bolted on.
+;; The down splits the first line back off as the title, so anything the up
+;; touched comes back unchanged; a Note written after it whose first line is not
+;; title-shaped will look odd going back, which is what a collapse costs.
+{:id "020-collapse-note-title-and-description"
+ :up ["ALTER TABLE notes ADD COLUMN text TEXT NOT NULL DEFAULT ''"
+      "UPDATE notes
+         SET text = CASE WHEN trim(COALESCE(description, '')) = ''
+                         THEN COALESCE(title, '')
+                         ELSE COALESCE(title, '') || char(10) || char(10) || description
+                    END"
+      "ALTER TABLE notes DROP COLUMN title"
+      "ALTER TABLE notes DROP COLUMN description"]
+ :down ["ALTER TABLE notes ADD COLUMN title TEXT NOT NULL DEFAULT ''"
+        "ALTER TABLE notes ADD COLUMN description TEXT NOT NULL DEFAULT ''"
+        "UPDATE notes
+           SET title = CASE WHEN instr(text, char(10)) > 0
+                            THEN substr(text, 1, instr(text, char(10)) - 1)
+                            ELSE text
+                       END,
+               description = CASE WHEN instr(text, char(10)) > 0
+                                  THEN ltrim(substr(text, instr(text, char(10)) + 1), char(10))
+                                  ELSE ''
+                             END"
+        "ALTER TABLE notes DROP COLUMN text"]
+ :transactions false}

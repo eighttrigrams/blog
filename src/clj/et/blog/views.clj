@@ -72,6 +72,8 @@
         .post-list .article-content a:hover { text-decoration: underline; color: #1a0dab; }
         .post-heading { display: flex; justify-content: space-between; align-items: center; }
         .post-heading h2 { margin: 0; }
+        .note-meta { font-size: 0.85rem; font-weight: 400; color: rgba(0,0,0,0.4); }
+        .note-text { margin: 0.5rem 0 0 0; white-space: pre-wrap; }
         .post-permalink { color: #1a0dab; text-decoration: none; }
         .post-permalink:hover { text-decoration: underline; }
         .post-article-link { margin-top: 0.75rem; font-weight: 600; }
@@ -108,7 +110,11 @@
         .error { color: #FD5353; }
         .edit-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
         .edit-heading h1 { margin: 0; }
-        .edit-actions { display: flex; gap: 0.75rem; flex-shrink: 0; }
+        .edit-actions { display: flex; gap: 0.75rem; flex-shrink: 0; align-items: center; }
+        /* A button that posts sits in its own form. Without this the form's
+           default bottom margin is what gets centred, and the button rides
+           half a margin above the plain links beside it. */
+        .edit-actions form { margin: 0; }
         .version-nav { display: flex; align-items: center; gap: 0.5rem; }
         .version-line { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
         .version-line-right { margin-right: 16px; }
@@ -294,29 +300,26 @@
       [:p.error error])
     [:form {:method "POST" :action "/notes" :style "max-width: 500px;"}
      [:div.form-group
-      [:label {:for "title"} "Title"]
-      [:input {:type "text" :name "title" :id "title" :required true}]]
-     [:div.form-group
-      [:label {:for "description"} "Description"]
-      [:textarea {:name "description" :id "description" :data-editor "1"
+      [:label {:for "text"} "Text"]
+      [:textarea {:name "text" :id "text" :data-editor "1"
                   :style "min-height: 100px;"}]]
      [:button.btn {:type "submit"} "Add Note"]]
     [:div {:style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem;"}
      (if (seq notes)
        [:ul {:style "list-style: none; padding: 0;"}
-        (for [{:keys [id title description source created_at]} notes]
+        (for [{:keys [id text source created_at]} notes]
           [:li {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
+           ;; A Note has no title to head it with, so the heading row carries
+           ;; when it arrived and from where, the way a Post's does.
            [:div.post-heading
-            [:h2 {:style "font-size: 1.2rem;"} title]
+            [:h2.note-meta
+             (human-datetime created_at)
+             (when-not (str/blank? source) (str " — " source))]
             [:div.edit-actions
              [:a.btn.btn-small {:href (str "/notes/" id "/edit")} "Edit"]
              [:form {:method "POST" :action (str "/notes/" id "/done")}
               [:button.btn.btn-small.btn-publish {:type "submit"} "Done"]]]]
-           [:p {:style "margin: 0; color: rgba(0,0,0,0.4); font-size: 0.85rem;"}
-            (human-datetime created_at)
-            (when-not (str/blank? source) (str " — " source))]
-           (when-not (str/blank? description)
-             [:p {:style "margin: 0.5rem 0 0 0; white-space: pre-wrap;"} description])])]
+           [:p.note-text text]])]
        [:p "The Notes box is empty."])]
     (editor-scripts)))
 
@@ -331,13 +334,10 @@
        [:button.btn {:type "submit"} "Save"]
        [:a.btn.btn-cancel {:href "/notes"} "Cancel"]]]
      [:div.form-group
-      [:label {:for "title"} "Title"]
-      [:input {:type "text" :name "title" :id "title" :value (or (:title note) "") :required true}]]
-     [:div.form-group
-      [:label {:for "description"} "Description"]
-      [:textarea {:name "description" :id "description" :data-editor "1"
+      [:label {:for "text"} "Text"]
+      [:textarea {:name "text" :id "text" :data-editor "1"
                   :style "min-height: 150px;"}
-       (or (:description note) "")]]]
+       (or (:text note) "")]]]
     (editor-scripts)))
 
 (defn notes-users-page [{:keys [logged-in? notes-users created error]}]

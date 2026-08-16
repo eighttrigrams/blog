@@ -595,34 +595,34 @@
 
 ;; --- Notes ---
 
-(defn create-note! [ds {:keys [title description source]}]
+(defn create-note! [ds {:keys [text source]}]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      ["INSERT INTO notes (title, description, source) VALUES (?, ?, ?)"
-       title (or description "") (or source "")])))
+      ["INSERT INTO notes (text, source) VALUES (?, ?)"
+       text (or source "")])))
 
 (defn list-open-notes [ds]
   (let [conn (get-conn ds)]
     (jdbc/execute! conn
-      ["SELECT id, title, description, source, created_at, modified_at
+      ["SELECT id, text, source, created_at, modified_at
         FROM notes WHERE done = 0 ORDER BY created_at DESC"]
       jdbc-opts)))
 
 (defn get-note [ds id]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
-      ["SELECT id, title, description, source, done, created_at, modified_at
+      ["SELECT id, text, source, done, created_at, modified_at
         FROM notes WHERE id = ?" id]
       jdbc-opts)))
 
-(defn update-note! [ds id {:keys [title description]}]
+(defn update-note! [ds id {:keys [text]}]
   (let [conn (get-conn ds)]
     (jdbc/execute-one! conn
       ["UPDATE notes
-        SET title = ?, description = ?,
+        SET text = ?,
             modified_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE id = ?"
-       title (or description "") id])))
+       text id])))
 
 (defn mark-note-done! [ds id]
   (let [conn (get-conn ds)]
