@@ -111,7 +111,10 @@
         (is (str/includes? body "<strong>bold</strong>"))
         (is (str/includes? body "<li>one</li>"))
         (is (str/includes? body "href=\"https://example.com\""))
-        (is (not (str/includes? body "**bold**"))))
+        ;; Read off the block, not the whole page: the box also carries every
+        ;; Note as it is written, for the editor that a click on it opens — so
+        ;; the marks are on the page on purpose, just not in what is read.
+        (is (not-any? #(str/includes? % "**bold**") (note-texts app admin))))
       (testing "an outside link opens away from the box, as everywhere else here"
         (is (str/includes? body "rel=\"noopener\""))))
     (testing "a single newline is still a line break — a Note is often just lines"
@@ -177,6 +180,65 @@
       (is (= 404 (:status (t/GET app "/notes/999/edit" admin))))
       (is (= 404 (:status (t/POST app "/notes/999" {"text" "Ghost"} admin))))
       (is (= 404 (:status (t/GET app "/notes/nonsense/edit" admin)))))))
+
+;; A Note is edited where it stands: clicking its text turns that Note into an
+;; editor and clicking away saves it. The clicking itself is a browser matter —
+;; what these pin is that the page carries everything the editor needs, and that
+;; the save the browser then makes is this same POST, answering in a form a fetch
+;; can read rather than a page to navigate to.
+(deftest a-note-is-edited-where-it-stands
+  (let [app (t/make-app)
+        [admin notes] (notes-credential! app)]
+    (t/POST-json app "/api/notes" {:text "As delivered"} notes)
+    (let [resp (t/GET app "/notes" admin)
+          page (t/parse resp)]
+      (testing "the Note's own text is on the page unrendered, for the editor to take over"
+        (is (= "As delivered"
+               (t/text-of (t/select-one page (hs/descendant (hs/class "note-editor")
+                                                            (hs/tag :textarea)))))))
+      (testing "and each Note says which one it is, so a click knows what it saves"
+        (is (= "1" (get-in (t/select-one page (hs/class "note-item")) [:attrs :data-note-id]))))
+      (testing "no Edit button — editing in place is what replaced it"
+        (is (not (str/includes? (:body resp) "/notes/1/edit"))))
+      (testing "the editor is not mounted at load: there is one per Note in the box,
+                and only the one being edited becomes a CodeMirror"
+        (let [marked (t/select-all page (hs/and (hs/tag :textarea) (hs/attr :data-editor)))]
+          (is (= 1 (count marked)) "only the Add Note box carries the marker")))
+      (testing "and the script that does it is asked for"
+        (is (str/includes? (:body resp) "/js/notes.js")))
+      ;; That the drag actually resizes is a browser matter — see the report.
+      ;; What is here is that it is asked for, and vertically only, as every
+      ;; other textarea on the site is.
+      (testing "the editor can be dragged taller, and only taller"
+        (is (re-find #"\.note-editor \.cm-editor \{[^}]*resize: vertical" (:body resp)))
+        (testing "which a box whose overflow is visible is not allowed to be"
+          (is (re-find #"\.note-editor \.cm-editor \{[^}]*overflow: hidden" (:body resp))))))))
+
+(deftest an-inline-save-is-the-form-post-without-the-navigation
+  (let [app (t/make-app)
+        admin (t/login app)]
+    (t/POST app "/notes" {"text" "Before"} admin)
+    (let [resp (t/POST app "/notes/1" {"text" "**After**" "no-redirect" "1"} admin)]
+      (testing "no redirect for a fetch to follow, and the Note comes back rendered
+                so the block that was being edited can be read again in place"
+        (is (= 200 (:status resp)))
+        (is (str/includes? (:body resp) "<strong>After</strong>"))
+        (is (not (str/includes? (:body resp) "<html")) "the fragment alone, not a page"))
+      (is (= ["After"] (note-texts app admin)) "and it is what the box reads now"))
+    (testing "refused for the same reason as the form post, in a form a fetch can read"
+      (let [refused (t/POST app "/notes/1" {"text" " " "no-redirect" "1"} admin)]
+        (is (= 400 (:status refused)))
+        (is (str/includes? (:body refused) "needs some text"))
+        (is (not (str/includes? (:body refused) "<html")))
+        (is (= ["After"] (note-texts app admin)))))
+    (testing "an unknown Note is a 404 here too, not a 500"
+      (is (= 404 (:status (t/POST app "/notes/999" {"text" "Ghost" "no-redirect" "1"} admin)))))
+    (testing "and a stale session still answers with the redirect the browser
+              looks for — it must never read as a saved Note"
+      (let [resp (t/POST app "/notes/1" {"text" "Sneaky" "no-redirect" "1"})]
+        (is (= 302 (:status resp)))
+        (is (= "/login" (t/redirect-location resp)))
+        (is (= ["After"] (note-texts app admin)))))))
 
 (deftest a-deleted-note-is-gone-for-good
   (let [app (t/make-app)

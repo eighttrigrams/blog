@@ -67,14 +67,29 @@
 (defn update-note-handler [req]
   (with-note req
     (fn [note]
-      (let [text (str/trim (or (get-in req [:form-params "text"]) ""))]
+      (let [text (str/trim (or (get-in req [:form-params "text"]) ""))
+            ;; An inline save — the click away from a Note being edited in the
+            ;; box — posts this same form over fetch and asks for an envelope a
+            ;; fetch can read instead of a page to navigate to. Blog already does
+            ;; this for Zen's in-between save on an Article, under the same name.
+            ;; It changes the response only: the validation and the write below
+            ;; are the very ones the form post goes through.
+            no-redirect? (some? (get-in req [:form-params "no-redirect"]))]
         (if (str/blank? text)
-          (c/html-response 400
-            (views/edit-note-page {:logged-in? true
-                                   :note note
-                                   :error "A Note needs some text."}))
+          (if no-redirect?
+            (c/text-response 400 "A Note needs some text.")
+            (c/html-response 400
+              (views/edit-note-page {:logged-in? true
+                                     :note note
+                                     :error "A Note needs some text."})))
           (do (db/update-note! (c/ensure-ds) (:id note) {:text text})
-              (c/redirect "/notes")))))))
+              (if no-redirect?
+                ;; The Note rendered, so the block that was being edited goes
+                ;; back to being read without a reload. Markdown is rendered
+                ;; server-side everywhere here, and this is that renderer
+                ;; answering — the browser only puts the answer back in place.
+                (c/html-response 200 (views/note-text-fragment text))
+                (c/redirect "/notes"))))))))
 
 (defn delete-note-handler [req]
   (with-note req

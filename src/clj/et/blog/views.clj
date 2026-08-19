@@ -92,6 +92,14 @@
            to come after .article-content to win, both being one class. */
         .note-text { margin-top: 0.5rem; }
         .note-text > :first-child { margin-top: 0; }
+        /* A Note being edited where it stands. The editor takes its look off the
+           textarea it replaces — the bundle copies font, padding and border — so
+           all that is wanted here is the drag handle: vertical only, as on every
+           other textarea on the site. `overflow` is not decoration; `resize` does
+           nothing on a box whose overflow is visible, and hidden rather than auto
+           because the scrolling inside is CodeMirror's own to do. */
+        .note-editor { margin-top: 0.5rem; }
+        .note-editor .cm-editor { resize: vertical; overflow: hidden; }
         .article-section { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; }
         .article-section h3 { font-size: 1rem; font-weight: 600; font-style: italic; color: rgba(0,0,0,0.65); margin-bottom: 0; }
         .footnotes { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
@@ -298,6 +306,14 @@
            [:li {:style "margin-bottom: 0.3rem; font-size: 0.95rem; color: rgba(0,0,0,0.7);"}
             (str email " \u2014 " created_at)])]]])))
 
+(defn note-text-fragment
+  "A Note's text as the box shows it: rendered markdown, the inside of its
+  `.note-text` block. A function rather than inline in `notes-page` because an
+  inline save hands the very same thing back, so the block that was being edited
+  can be read again without reloading the page — one renderer, one place."
+  [text]
+  (render/markdown->html text))
+
 (defn notes-page [{:keys [logged-in? notes error]}]
   (layout {:title "Notes" :logged-in? logged-in?}
     [:h1 "Notes"]
@@ -313,15 +329,17 @@
      (if (seq notes)
        [:ul {:style "list-style: none; padding: 0;"}
         (for [{:keys [id text source created_at]} notes]
-          [:li {:style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
+          [:li.note-item {:data-note-id id
+                          :style "margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.08);"}
            ;; A Note has no title to head it with, so the heading row carries
            ;; when it arrived and from where, the way a Post's does.
            [:div.post-heading
             [:h2.note-meta
              (human-datetime created_at)
              (when-not (str/blank? source) (str " — " source))]
+            ;; No Edit button: a click on the text below opens the Note where it
+            ;; stands (notes.js), so Delete is the only thing left to click here.
             [:div.edit-actions
-             [:a.btn.btn-small {:href (str "/notes/" id "/edit")} "Edit"]
              [:form {:method "POST" :action (str "/notes/" id "/delete")}
               ;; Deleting a Note takes the row away — no tombstone, nothing
               ;; reads it again — so the click asks first. Blog's inline idiom,
@@ -330,10 +348,25 @@
                {:type "submit"
                 :onclick "return confirm('Delete this Note? It is gone for good.');"}
                "Delete"]]]]
-           [:div.note-text.article-content (h/raw (render/markdown->html text))]])]
+           [:div.note-text.article-content (h/raw (note-text-fragment text))]
+           ;; The Note as it is written, waiting for the click that edits it.
+           ;; Deliberately *not* marked `data-editor`: that marker means "mount at
+           ;; load", and there is one of these per Note in the box. notes.js
+           ;; mounts the one being edited, and only when it is being edited.
+           ;; `min-height: 0` because the page-wide 300px is meant for a form
+           ;; field the size of an Article, and CodeMirror takes the height it
+           ;; finds on the textarea it replaces.
+           [:div.note-editor {:style "display: none;"}
+            [:textarea {:name "text" :style "min-height: 0;"} text]]])]
        [:p "The Notes box is empty."])]
-    (editor-scripts)))
+    [:div#save-flash]
+    (editor-scripts)
+    [:script {:src "/js/notes.js"}]))
 
+;; Reachable by URL only, now that the box edits a Note where it stands: it is
+;; the one save path that needs no JavaScript, and the fallback if the inline
+;; editor ever breaks. The POST it makes is the same one an inline save makes —
+;; see `update-note-handler`.
 (defn edit-note-page [{:keys [logged-in? note error]}]
   (layout {:title "Edit Note" :logged-in? logged-in?}
     (when error
