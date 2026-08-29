@@ -28,14 +28,25 @@
       (if (str/blank? email)
         (c/html-response 400
           (views/email-page (page-data req {:notice "Please enter an email address."})))
-        (do
-          (if (= action "unsubscribe")
+        (let [unsubscribe? (= action "unsubscribe")]
+          (if unsubscribe?
             (db/unsubscribe-email! (c/ensure-ds) email)
             (db/subscribe-email! (c/ensure-ds) email))
+          ;; Subscriptions were the one event that never told anyone: this
+          ;; handler wrote the row and rendered the page, and only
+          ;; message-submit-handler below ever reached tracker.
+          (future
+            (try
+              (tracker/send-message!
+                (str "Blog " (if unsubscribe? "unsubscribe" "subscription") " from \"" email "\"")
+                (str email (if unsubscribe? " unsubscribed from" " subscribed to") " the blog.")
+                "eighttrigrams.net")
+              (catch Exception e
+                (println "Failed to forward subscription to tracker:" (.getMessage e)))))
           (c/html-response 200
-            (views/email-page (page-data req {:notice (if (= action "unsubscribe")
-                                                          "You have been unsubscribed."
-                                                          "Thanks for subscribing!")}))))))))
+            (views/email-page (page-data req {:notice (if unsubscribe?
+                                                        "You have been unsubscribed."
+                                                        "Thanks for subscribing!")}))))))))
 
 (defn message-submit-handler [req]
   (if-not (circuit-breaker/check-and-record!)

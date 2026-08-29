@@ -7,6 +7,7 @@
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [et.blog.middleware.rate-limit :refer [wrap-rate-limit]]
             [et.blog.render :as render]
+            [et.blog.tracker :as tracker]
             [et.blog.views :as views]
             [et.blog.handler.common :as c]
             [et.blog.handler.auth :as auth-h]
@@ -133,6 +134,7 @@
   (reset! c/*config config)
   (when-let [base-url (:image-base-url config)]
     (render/set-image-base-url! base-url))
+  (tracker/configure! (:tracker config))
   (c/ensure-ds)
   (app (c/prod-mode?)))
 
@@ -144,6 +146,7 @@
     (tel/log! :info (str "Starting system in " (if prod? "production" "development") " mode"))
     (when-let [base-url (:image-base-url @c/*config)]
       (render/set-image-base-url! base-url))
+    (tracker/configure! (:tracker @c/*config))
     (c/ensure-ds)
     (when-not prod?
       (when-let [nrepl-port (:nrepl-port @c/*config)]
