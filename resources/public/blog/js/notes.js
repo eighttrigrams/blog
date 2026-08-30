@@ -152,6 +152,21 @@ function closest(node,selector){
   return node&&node.closest?node.closest(selector):null;
 }
 
+/* The quick-edit variant of the philosophy: a Note is low stakes and has no
+   page of its own to get back to, so Escape and the save chord mean the same
+   thing here - save and blur. No divergence modal, because there is no
+   divergence to answer for: close() writes what changed and returns to reading,
+   and a Note that was only looked at is not written at all. */
+document.addEventListener('keydown',function(e){
+  if(!active)return;
+  var quit=e.key==='Escape'||
+           (e.metaKey&&(e.code==='Digit9'||e.key==='9'))||
+           ((e.metaKey||e.ctrlKey)&&e.key==='Enter');
+  if(!quit)return;
+  e.preventDefault();
+  close();
+});
+
 document.addEventListener('click',function(e){
   /* Inside the open editor is just writing. */
   if(active&&active.p.host.contains(e.target))return;
