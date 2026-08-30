@@ -92,6 +92,21 @@
     (.setFileType client FTP/BINARY_FILE_TYPE)
     (.setSoTimeout client 30000)
     (.enterLocalPassiveMode client)
+    ;; Passive FTP hands back the address to open the data channel on, and the
+    ;; server answers with its own IPv4 - 227 Entering Passive Mode (85,13,...).
+    ;; A fly machine is IPv6-only with NAT64 for outbound v4, so it reaches this
+    ;; host as 64:ff9b::550d:93a0 and cannot dial a bare IPv4 address at all.
+    ;; The control channel is unaffected, which is why login, CWD and MKD all
+    ;; work there and only the transfer fails.
+    ;;
+    ;; So ignore what the server advertises and use the address the control
+    ;; connection is already talking to - the same machine either way. Commons-net
+    ;; ships this workaround but only applies it when the advertised address looks
+    ;; private, and 85.13.147.160 is public, so it has to be asked for.
+    (.setPassiveNatWorkaroundStrategy
+      client
+      (reify org.apache.commons.net.ftp.FTPClient$HostnameResolver
+        (resolve [_ _] (.getHostAddress (.getRemoteAddress client)))))
     client))
 
 (defn- ensure-dir!
@@ -128,8 +143,18 @@
       (try
         (ensure-dir! client dir)
         (when-not (.storeFile client remote stream)
-          (throw (ex-info "FTP refused the upload"
-                          {:path remote :reply (.getReplyString client)})))
+          (let [reply (str/trim (or (.getReplyString client) "no reply"))]
+            ;; A transfer that dies part-way leaves what did arrive on the server -
+            ;; the first failure here left an 8192-byte stub, one buffer's worth,
+            ;; sitting where an image should be. Take it back out. This is the only
+            ;; delete in the namespace and it names the exact path just attempted,
+            ;; so it cannot become a way to remove anything else.
+            (try (.deleteFile client remote) (catch Exception _))
+            ;; The reply text goes in the message, not only in ex-data: the caller
+            ;; surfaces .getMessage, and "FTP refused the upload" on its own says
+            ;; nothing about which of the many ways it can refuse this was.
+            (throw (ex-info (str "FTP refused the upload - " reply)
+                            {:path remote :reply reply}))))
         (str dir "/" name)
         (finally
           (try (.logout client) (catch Exception _))

@@ -876,18 +876,21 @@
        [:div.form-group
         [:label {:for "image"} "Image"]
         [:input {:type "text" :name "image" :id "image" :value (or (:image post) "")}]
-        ;; Only for a post that exists: the upload posts to /post/:id/image, and
-        ;; a new post has no id yet. Save first, then upload.
-        (when-not new?
-          [:div#image-upload {:data-post-id (:post_id post)
-                              :style "margin-top: 0.4rem; display: flex; gap: 0.5rem; align-items: center;"}
-           [:input {:type "file" :id "image-file" :accept "image/png,image/jpeg,image/gif,image/webp,image/avif"
-                    :style "font-size: 0.9rem;"}]
-           [:button.btn.btn-small {:type "button" :id "image-upload-btn"} "Upload"]
-           [:span#image-upload-status.muted {:style "font-size: 0.9rem;"}]])]
+]
        [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content" :data-editor "1"} (or (:content post) "")]]
+       ;; Below the content, not up beside the Image field: choosing a file is a
+       ;; step you take once, and it was sitting between the two things actually
+       ;; being written. Only for a post that exists - the upload posts to
+       ;; /post/:id/image, and a new post has no id yet.
+       (when-not new?
+         [:div#image-upload {:data-post-id (:post_id post)
+                             :style "margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;"}
+          [:input {:type "file" :id "image-file" :accept "image/png,image/jpeg,image/gif,image/webp,image/avif"
+                   :style "font-size: 0.9rem;"}]
+          [:button.btn.btn-small {:type "button" :id "image-upload-btn"} "Upload"]
+          [:span#image-upload-status.muted {:style "font-size: 0.9rem;"}]])
       ]
       (editor-scripts)
       ;; Posts only. Articles keep their images under blog-images/<article-id>/
