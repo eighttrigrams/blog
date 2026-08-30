@@ -26,6 +26,51 @@ window.BlogEditors={
   focused:focused
 };
 
+/* ---- the save chord --------------------------------------------------- */
+
+/* ⌘9 (and ⌘⏎ / ⌃⏎) saves the page you are editing, so the answer to "does ⌘9
+   work here?" does not depend on which box you are standing in. Zen already had
+   it; the plain edit pages did not, which is the gap this closes.
+
+   `e.code` for the digit, not `e.key`: a modifier can change what a key *is* -
+   ⌘9 does not necessarily arrive as "9" - while `Digit9` names the physical key
+   whatever is held down with it. That is the rule claude-coordinator's
+   ui/keys.cljs already writes down, and this follows it. `e.key` is still
+   accepted so nothing that worked before stops working.
+
+   requestSubmit() and NOT submit(): the vendored CodeMirror copies the document
+   back into the textarea on the form's "submit" event, and form.submit() does
+   not fire that event. Submitting the wrong way would post whatever the textarea
+   held before the editor mounted - a silent save of stale text. */
+function saveChord(e){
+  return ((e.metaKey||e.ctrlKey)&&e.key==='Enter')||
+         (e.metaKey&&(e.code==='Digit9'||e.key==='9'));
+}
+
+function targetForm(){
+  var view=focused(),name=null;
+  if(view){for(var n in views){if(views[n]===view){name=n;break;}}}
+  var areas=document.querySelectorAll('textarea[data-editor]');
+  for(var i=0;i<areas.length;i++){
+    if(!name||areas[i].id===name||areas[i].name===name)return areas[i].form;
+  }
+  return areas.length?areas[0].form:null;
+}
+
+document.addEventListener('keydown',function(e){
+  if(!saveChord(e))return;
+  /* Zen has its own handler and its own save. Leave it alone when it is up.
+     Same test zen.js makes: the overlay carries an inline display:none. */
+  var zen=document.getElementById('zen-overlay');
+  if(zen&&zen.style.display!=='none')return;
+  var form=targetForm();
+  if(!form)return;
+  e.preventDefault();
+  if(form.requestSubmit){form.requestSubmit();}
+  else{var b=form.querySelector('button[type="submit"],input[type="submit"]');
+       if(b)b.click();}
+});
+
 /* ---- the symbol palette ---------------------------------------------- */
 
 /* Daniel's palette script inserts at a textarea's selectionStart, and these

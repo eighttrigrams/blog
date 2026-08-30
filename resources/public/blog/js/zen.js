@@ -148,7 +148,12 @@ document.getElementById('zen-close').addEventListener('click',close);
    while writing must not throw you out. */
 document.addEventListener('keydown',function(e){
   if(!isOpen())return;
-  if(e.metaKey&&e.key==='9'){e.preventDefault();save();}
+  /* `e.code` for the digit: a modifier can change what a key *is*, so â9 does
+     not necessarily arrive as "9", while Digit9 names the physical key whatever
+     is held down with it - the rule claude-coordinator's ui/keys.cljs states.
+     `e.key` stays accepted so nothing that worked before stops working. */
+  if((e.metaKey&&(e.code==='Digit9'||e.key==='9'))||
+     ((e.metaKey||e.ctrlKey)&&e.key==='Enter')){e.preventDefault();save();}
 });
 
 /* The palette collects document.querySelectorAll('textarea') at load, and
