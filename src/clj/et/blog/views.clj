@@ -199,7 +199,7 @@
          (h/raw "<svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\"><path d=\"M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z\"/></svg>")]
         (when logged-in?
           (list
-            [:a {:href "/notes-users"} "Notes users"]
+            [:a {:href "/dashboard"} "Dashboard"]
             [:a {:href "/logout"} "Logout"]))]]
       body]])))
 
@@ -265,7 +265,17 @@
              [:img.article-preview {:src preview_image :alt title}])])]
        [:p "No drafts."])]))
 
-(defn email-page [{:keys [logged-in? notice error messages subscribers]}]
+(defn interaction-notice
+  "What a visitor is told when the switch is off. Nothing at all under
+  :hidden - that level exists so the site reads as though it never had
+  comments, and a notice saying \"disabled\" is exactly the trace it is
+  meant to remove."
+  [interactivity]
+  (when (= :deactivated interactivity)
+    [:p.muted {:style "font-style: italic;"}
+     "Comments and subscriptions are temporarily switched off."]))
+
+(defn email-page [{:keys [logged-in? notice error messages subscribers interactivity]}]
   (layout {:title "Email updates" :logged-in? logged-in?}
     [:h1 "Email updates"]
     [:p "Get notified when new articles are published."]
@@ -273,13 +283,20 @@
       [:p {:style "font-weight: 600;"} notice])
     (when error
       [:p.error error])
-    [:form {:method "POST" :action "/email" :style "max-width: 400px;"}
-     [:div {:style "margin-bottom: 0.75rem; display: flex; gap: 1rem;"}
-      [:label [:input {:type "radio" :name "action" :value "subscribe" :checked true}] " Subscribe"]
-      [:label [:input {:type "radio" :name "action" :value "unsubscribe"}] " Unsubscribe"]]
-     [:div {:style "display: flex; gap: 0.5rem;"}
-      [:input {:type "email" :name "email" :placeholder "you@example.com" :required true :style "flex: 1;"}]
-      [:button.btn {:type "submit"} "Submit"]]]
+    ;; :hidden takes the subscribe form away without comment; :deactivated
+    ;; leaves the notice so a visitor knows it is off rather than broken.
+    ;; Unsubscribe stays reachable in both, so nobody is stuck on the list.
+    (interaction-notice interactivity)
+    (when (or logged-in? (not= :hidden interactivity))
+      [:form {:method "POST" :action "/email" :style "max-width: 400px;"}
+       [:div {:style "margin-bottom: 0.75rem; display: flex; gap: 1rem;"}
+        (when (or logged-in? (= :live interactivity))
+          [:label [:input {:type "radio" :name "action" :value "subscribe" :checked true}] " Subscribe"])
+        [:label [:input {:type "radio" :name "action" :value "unsubscribe"
+                         :checked (not (or logged-in? (= :live interactivity)))}] " Unsubscribe"]]
+       [:div {:style "display: flex; gap: 0.5rem;"}
+        [:input {:type "email" :name "email" :placeholder "you@example.com" :required true :style "flex: 1;"}]
+        [:button.btn {:type "submit"} "Submit"]]])
     [:div {:style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem;"}
      [:h2 "Leave a message"]
      (when error
@@ -469,19 +486,27 @@
      [:div {:style "margin-left: 2rem; margin-top: 1rem; border-left: 2px solid rgba(0,0,0,0.08); padding-left: 1rem;"}
       (for [r replies] (reply-entry logged-in? r))])])
 
-(defn- comments-section [article_id version versions comments logged-in?]
-  (when (and version (pos? version))
+(defn- comments-section [article_id version versions comments logged-in? interactivity]
+  ;; Under :hidden the whole section disappears for visitors, but never for
+  ;; the owner - he still has to be able to read and moderate what is there.
+  (when (and version (pos? version)
+             (or logged-in? (not= :hidden interactivity)))
     [:div.article-section
      [:h3 {:style "font-style: normal; margin-bottom: 1.5rem;"}
       [:a {:href (str "/article/" article_id "/version/" version "/comments")
            :style "color: rgba(0,0,0,0.65); text-decoration: none;"}
        "#"]
-      " Comments"]
+      " Comments"
+      (when (and logged-in? (not= :live interactivity))
+        [:span.muted {:style "font-size: 0.8rem; font-weight: normal; font-style: italic;"}
+         (str " — " (name interactivity) ", visitors see this differently")])]
      (when (seq comments)
        [:div (for [c comments] (comment-entry article_id versions logged-in? c))])
-     [:a.action-link {:href (str "/article/" article_id "/version/" version "/comment")} "Leave a comment"]]))
+     (if (= :live interactivity)
+       [:a.action-link {:href (str "/article/" article_id "/version/" version "/comment")} "Leave a comment"]
+       (interaction-notice interactivity))]))
 
-(defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda rendered-preamble comments]}]
+(defn article-page [{:keys [article versions logged-in? current-version rendered-content rendered-addenda rendered-preamble comments interactivity]}]
   (let [{:keys [article_id title subtitle created_at version content]} article]
     (layout {:title title :logged-in? logged-in?}
       [:article
@@ -523,15 +548,18 @@
           [:h3 {:style "font-size: 1rem; font-weight: 600; font-style: italic; color: rgba(0,0,0,0.65); margin-bottom: 0;"} "Addenda:"]
           [:div.article-content (h/raw rendered-addenda)]])]
       (when (or logged-in? (not= article_id 36))
-        (comments-section article_id version versions comments logged-in?)))))
+        (comments-section article_id version versions comments logged-in? interactivity)))))
 
-(defn comment-form-page [{:keys [article logged-in? error]}]
+(defn comment-form-page [{:keys [article logged-in? error interactivity]}]
   (let [{:keys [article_id version title]} article]
     (layout {:title (str "Comment on " title) :logged-in? logged-in?}
       [:h1 "Leave a comment"]
       [:p "On: " [:strong title] " (v" version ")"]
       (when error
         [:p.error error])
+      (when (and interactivity (not= :live interactivity))
+        (interaction-notice interactivity))
+      (when (or (nil? interactivity) (= :live interactivity))
       [:form {:method "POST" :action (str "/article/" article_id "/version/" version "/comment") :style "max-width: 500px;"}
        [:div.form-group
         [:label {:for "display-name"} "Display name"]
@@ -542,9 +570,9 @@
        [:div.form-group
         [:label {:for "body"} "Comment"]
         [:textarea {:name "body" :id "body" :required true :style "min-height: 150px;"}]]
-       [:button.btn {:type "submit"} "Submit"]])))
+       [:button.btn {:type "submit"} "Submit"]]))))
 
-(defn reply-form-page [{:keys [comment article logged-in? error]}]
+(defn reply-form-page [{:keys [comment article logged-in? error interactivity]}]
   (let [{:keys [id display_name body]} comment
         {:keys [title]} article]
     (layout {:title (str "Reply to " display_name) :logged-in? logged-in?}
@@ -554,6 +582,9 @@
        (h/raw (render/markdown->html body))]
       (when error
         [:p.error error])
+      (when (and interactivity (not= :live interactivity))
+        (interaction-notice interactivity))
+      (when (or (nil? interactivity) (= :live interactivity))
       [:form {:method "POST" :action (str "/comments/" id "/reply") :style "max-width: 500px;"}
        [:div.form-group
         [:label {:for "display-name"} "Display name"]
@@ -564,7 +595,7 @@
        [:div.form-group
         [:label {:for "body"} "Reply"]
         [:textarea {:name "body" :id "body" :required true :style "min-height: 150px;"}]]
-       [:button.btn {:type "submit"} "Submit"]])))
+       [:button.btn {:type "submit"} "Submit"]]))))
 
 (defn comment-page [{:keys [article comment rendered-body replies logged-in?]}]
   (let [{:keys [article_id title version]} article
@@ -625,6 +656,14 @@
        [:label {:for "reason"} "Reason (optional)"]
        [:textarea {:name "reason" :id "reason" :data-editor "1"
                    :style "min-height: 80px;"}]]
+      [:div.form-group
+       [:label "Notification"]
+       [:label {:style "font-weight: normal; display: block;"}
+        [:input {:type "radio" :name "notify" :value "notify" :checked true}]
+        " Email them — with the reason above, or without one if it is blank"]
+       [:label {:style "font-weight: normal; display: block;"}
+        [:input {:type "radio" :name "notify" :value "silent"}]
+        " Silently — send nothing at all"]]
       [:div.confirm-actions
        [:button.btn.btn-danger {:type "submit"} "Delete"]
        [:a.btn.btn-cancel {:href (str "/article/" (:article_id comment) "/version/" (:article_version comment))} "Cancel"]]]]
@@ -890,3 +929,123 @@
   (layout {:title "Not Found" :logged-in? logged-in?}
     [:h1 "Not Found"]
     [:p "The page you requested does not exist."]))
+
+;; --- Dashboard ---------------------------------------------------------
+;;
+;; The owner's one page: what the site is doing, who is on it, and what has
+;; happened. Notes users used to be a page of their own and are now a section
+;; here.
+
+(defn- dash-section [id title & body]
+  [:div.article-section {:id id :style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem;"}
+   [:h2 {:style "margin-top: 0;"} title]
+   body])
+
+(defn- interactivity-form [interactivity]
+  [:form {:method "POST" :action "/dashboard/settings"}
+   (for [[level label hint]
+         [[:live "Live" "Comments and subscriptions work normally."]
+          [:deactivated "Deactivated"
+           "Nothing new is accepted, and visitors are told it is switched off."]
+          [:hidden "Hidden"
+           "As deactivated, and existing comments are not shown at all — the site reads as though it never had comments. Visitors are told nothing."]]]
+     [:label {:style "font-weight: normal; display: block; margin-bottom: 0.6rem;"}
+      [:input {:type "radio" :name "interactivity" :value (name level)
+               :checked (= level interactivity)}]
+      " " [:strong label]
+      [:span.muted {:style "display: block; margin-left: 1.6rem; font-size: 0.9rem;"} hint]])
+   [:button.btn {:type "submit" :style "margin-top: 0.5rem;"} "Save"]])
+
+(defn- subscribers-section [subscribers]
+  (if (seq subscribers)
+    [:ul {:style "list-style: none; padding: 0;"}
+     (for [{:keys [email created_at]} subscribers]
+       [:li {:style "margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,0,0,0.06);"}
+        [:div [:strong email]
+         [:span.muted {:style "font-size: 0.9rem;"} (str " — since " (human-date created_at))]]
+        [:form {:method "POST" :action "/dashboard/unsubscribe"
+                :style "margin-top: 0.4rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;"}
+         [:input {:type "hidden" :name "email" :value email}]
+         [:input {:type "text" :name "reason" :placeholder "Reason (optional)" :style "flex: 1; min-width: 12rem;"}]
+         [:label {:style "font-weight: normal; font-size: 0.9rem;"}
+          [:input {:type "radio" :name "notify" :value "notify" :checked true}] " Tell them"]
+         [:label {:style "font-weight: normal; font-size: 0.9rem;"}
+          [:input {:type "radio" :name "notify" :value "silent"}] " Silently"]
+         [:button.btn.btn-small.btn-danger {:type "submit"} "Remove"]]])]
+    [:p "Nobody is subscribed."]))
+
+(defn- events-section [events]
+  (if (seq events)
+    [:ul {:style "list-style: none; padding: 0;"}
+     (for [{:keys [id kind summary detail actor notified created_at]} events]
+       [:li {:key id :style "margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,0,0,0.06);"}
+        [:div
+         [:span.muted {:style "font-size: 0.85rem;"} (str (human-date created_at) " · " kind)]
+         (when (not= notified "none")
+           [:span.muted {:style "font-size: 0.85rem;"} (str " · " notified)])]
+        [:div {:style "margin-top: 0.2rem;"} [:strong summary]]
+        (when (and actor (not= actor "")) 
+          [:div.muted {:style "font-size: 0.85rem;"} actor])
+        (when (and detail (not= detail ""))
+          [:details {:style "margin-top: 0.3rem;"}
+           [:summary {:style "cursor: pointer; font-size: 0.9rem;"} "Detail"]
+           [:pre {:style "white-space: pre-wrap; font-size: 0.9rem; margin: 0.3rem 0 0 0;"} detail]])])]
+    [:p "Nothing has happened yet."]))
+
+(defn dashboard-page
+  [{:keys [logged-in? notes-users created error notice subscribers events interactivity]}]
+  (layout {:title "Dashboard" :logged-in? logged-in?}
+    [:h1 "Dashboard"]
+    (when error [:p.error error])
+    (when notice [:p {:style "font-weight: 600;"} notice])
+
+    (dash-section "settings" "Interactivity"
+      [:p.muted "One switch, covering comments and subscriptions together. "
+       "Unsubscribing always stays possible, so turning this off never traps "
+       "anyone already on the list."]
+      (interactivity-form (or interactivity :live)))
+
+    (dash-section "notes-users" "Notes users"
+      [:p.muted "A notes user may deliver a Note to the "
+       [:a {:href "/notes"} "Notes box"]
+       " and nothing else. Reads of the public API need no credentials at all."]
+      (when created
+        [:div {:style "margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #FD5353; border-radius: 5px;"}
+         [:p {:style "margin: 0;"}
+          "Created " [:strong (:name created)] ". Its password is shown here once and "
+          "nowhere else — it is stored as a hash and cannot be recovered."]
+         [:p {:style "margin: 0.5rem 0 0 0;"}
+          [:code {:style "font-size: 1rem; word-break: break-all;"} (:password created)]]])
+      [:form {:method "POST" :action "/notes-users" :style "max-width: 400px;"}
+       [:div.form-group
+        [:label {:for "name"} "Name"]
+        [:input {:type "text" :name "name" :id "name" :required true}]]
+       [:div.form-group
+        [:label {:for "password"} "Password"]
+        [:input {:type "text" :name "password" :id "password"}]
+        [:p.muted {:style "margin: 0.3rem 0 0 0; font-size: 0.9rem;"}
+         "Leave empty to have one generated."]]
+       [:button.btn {:type "submit"} "Create"]]
+      (if (seq notes-users)
+        [:ul {:style "list-style: none; padding: 0; margin-top: 1.5rem;"}
+         (for [{:keys [id name created_at revoked_at]} notes-users]
+           [:li {:style "margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;"}
+            [:span
+             [:strong name]
+             [:span.muted {:style "font-size: 0.9rem;"}
+              (str " — created " (human-date created_at))
+              (when revoked_at (str ", revoked " (human-date revoked_at)))]]
+            (when-not revoked_at
+              [:form {:method "POST" :action (str "/notes-users/" id "/revoke")}
+               [:button.btn.btn-small.btn-danger {:type "submit"} "Revoke"]])])]
+        [:p {:style "margin-top: 1.5rem;"} "No notes users yet."]))
+
+    (dash-section "subscribers" (str "Subscribers (" (count subscribers) ")")
+      (subscribers-section subscribers))
+
+    (dash-section "events" "Log"
+      [:p.muted "Everything worth knowing about, newest first — the fallback "
+       "for a notification mail that never arrived. Deletions and unsubscribes "
+       "are here too, which is why this is a log and not a view over the "
+       "other tables: those rows are gone."]
+      (events-section events))))

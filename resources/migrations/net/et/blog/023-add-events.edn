@@ -1,0 +1,13 @@
+{:id "023-add-events"
+ :up ["CREATE TABLE IF NOT EXISTS events (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         kind TEXT NOT NULL,
+         summary TEXT NOT NULL,
+         detail TEXT NOT NULL DEFAULT '',
+         actor TEXT NOT NULL DEFAULT '',
+         notified TEXT NOT NULL DEFAULT 'none',
+         created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))"
+      "CREATE INDEX IF NOT EXISTS idx_events_created_at ON events (created_at DESC, id DESC)"]
+ :down ["DROP INDEX IF EXISTS idx_events_created_at"
+        "DROP TABLE IF EXISTS events"]
+ :transactions false}

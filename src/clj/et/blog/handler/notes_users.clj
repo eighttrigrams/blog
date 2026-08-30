@@ -6,6 +6,7 @@
             [et.blog.auth :as auth]
             [et.blog.db :as db]
             [et.blog.views :as views]
+            [et.blog.handler.dashboard :as dashboard]
             [buddy.hashers :as hashers]
             [clojure.string :as str])
   (:import [java.security SecureRandom]
@@ -31,15 +32,18 @@
       {:status 200 :body {:token (auth/create-notes-token (:name user))}}
       {:status 401 :body {:error "Invalid credentials"}})))
 
+;; Notes users are a section of the dashboard now, so both the success and
+;; the error render are that page.
 (defn- page-data [opts]
-  (merge {:logged-in? true
-          :notes-users (db/list-notes-users (c/ensure-ds))}
-         opts))
+  (dashboard/page-data opts))
 
+;; /notes-users stays a working URL rather than becoming a redirect: it is
+;; where the old links and the existing tests point, and it now simply renders
+;; the dashboard, of which notes users are one section.
 (defn notes-users-page-handler [req]
   (c/require-login req
     (fn [_]
-      (c/html-response 200 (views/notes-users-page (page-data {}))))))
+      (c/html-response 200 (views/dashboard-page (page-data {}))))))
 
 (defn create-notes-user-handler [req]
   (c/require-login req
@@ -49,11 +53,11 @@
             password (if (str/blank? given) (generate-password) given)]
         (if (str/blank? name)
           (c/html-response 400
-            (views/notes-users-page (page-data {:error "Please enter a name."})))
+            (views/dashboard-page (page-data {:error "Please enter a name."})))
           (try
             (db/create-notes-user! (c/ensure-ds) name (hashers/derive password))
             (c/html-response 200
-              (views/notes-users-page
+              (views/dashboard-page
                 (page-data {:created {:name name :password password}})))
             (catch Exception e
               (c/html-response 400
@@ -68,4 +72,4 @@
       (when-let [id (try (Integer/parseInt (get-in req [:params :id]))
                          (catch NumberFormatException _ nil))]
         (db/revoke-notes-user! (c/ensure-ds) id))
-      (c/redirect "/notes-users"))))
+      (c/redirect "/dashboard#notes-users"))))

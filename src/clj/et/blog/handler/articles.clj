@@ -42,7 +42,8 @@
                                :rendered-content rendered-content
                                :rendered-addenda rendered-addenda
                                :rendered-preamble rendered-preamble
-                               :comments comments-with-replies})))
+                               :comments comments-with-replies
+                               :interactivity (db/interactivity (c/ensure-ds))})))
       (c/html-response 404
         (views/not-found-page {:logged-in? auth?})))))
 

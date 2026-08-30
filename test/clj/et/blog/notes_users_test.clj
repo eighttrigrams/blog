@@ -113,11 +113,14 @@
 (deftest the-nav-shows-the-notes-links-only-to-the-owner
   (let [app (t/make-app)
         token (t/login app)]
+    ;; Notes users became a section of the dashboard, so the owner-only link
+    ;; in the nav is /dashboard now. What is under test is unchanged: that
+    ;; these links appear for the owner and for nobody else.
     (testing "a visitor sees neither"
       (let [body (:body (t/GET app "/articles"))]
-        (is (not (str/includes? body "/notes-users")))
+        (is (not (str/includes? body "/dashboard")))
         (is (not (str/includes? body "\"/notes\"")))))
     (testing "the owner sees both"
       (let [body (:body (t/GET app "/articles" token))]
-        (is (str/includes? body "/notes-users"))
+        (is (str/includes? body "/dashboard"))
         (is (str/includes? body "\"/notes\""))))))

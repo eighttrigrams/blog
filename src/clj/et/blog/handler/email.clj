@@ -12,7 +12,8 @@
   (let [auth? (c/logged-in? req)]
     (merge {:logged-in? auth?
             :messages (when auth? (db/list-messages (c/ensure-ds)))
-            :subscribers (when auth? (db/list-email-subscribers (c/ensure-ds)))}
+            :subscribers (when auth? (db/list-email-subscribers (c/ensure-ds)))
+            :interactivity (db/interactivity (c/ensure-ds))}
            opts)))
 
 (defn email-page-handler [req]
@@ -29,9 +30,19 @@
         (c/html-response 400
           (views/email-page (page-data req {:notice "Please enter an email address."})))
         (let [unsubscribe? (= action "unsubscribe")]
+          ;; Leaving the list stays possible even when the switch is off -
+          ;; turning subscriptions off must not trap the people already on it.
+          (if (and (not unsubscribe?) (not (db/accepting-interaction? (c/ensure-ds))))
+            (c/html-response 403
+              (views/email-page (page-data req {:error "Subscriptions are switched off."})))
+            (do
           (if unsubscribe?
             (db/unsubscribe-email! (c/ensure-ds) email)
             (db/subscribe-email! (c/ensure-ds) email))
+          (db/record-event! (c/ensure-ds)
+            {:kind (if unsubscribe? :unsubscribe :subscribe)
+             :summary (str email (if unsubscribe? " unsubscribed" " subscribed"))
+             :actor email})
           ;; Subscriptions were the one event that never told anyone: this
           ;; handler wrote the row and rendered the page, and only
           ;; message-submit-handler below ever reached tracker.
@@ -46,7 +57,7 @@
           (c/html-response 200
             (views/email-page (page-data req {:notice (if unsubscribe?
                                                         "You have been unsubscribed."
-                                                        "Thanks for subscribing!")}))))))))
+                                                        "Thanks for subscribing!")}))))))))))
 
 (defn message-submit-handler [req]
   (if-not (circuit-breaker/check-and-record!)
@@ -59,6 +70,11 @@
           (views/email-page (page-data req {:notice "Please fill in all fields."})))
         (do
           (db/create-message! (c/ensure-ds) email message)
+          (db/record-event! (c/ensure-ds)
+            {:kind :message
+             :summary (str "Message from " email)
+             :detail message
+             :actor email})
           (future
             (try
               (tracker/send-message! (str "Blog message from \"" email "\"") message "eighttrigrams.net")

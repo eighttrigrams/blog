@@ -57,7 +57,8 @@
         article (db/get-article-by-version (c/ensure-ds) id ver {})]
     (if (and article (pos? ver))
       (c/html-response 200
-        (views/comment-form-page {:article article :logged-in? (c/logged-in? req)}))
+        (views/comment-form-page {:article article :logged-in? (c/logged-in? req)
+                                  :interactivity (db/interactivity (c/ensure-ds))}))
       (c/html-response 404
         (views/not-found-page {:logged-in? (c/logged-in? req)})))))
 
@@ -68,6 +69,14 @@
     (if (or (nil? article) (zero? ver))
       (c/html-response 404
         (views/not-found-page {:logged-in? (c/logged-in? req)}))
+      (if-not (db/accepting-interaction? (c/ensure-ds))
+        ;; Defence in depth: the link and the form are already gone, but the
+        ;; endpoint must refuse a hand-rolled POST too, or the switch is
+        ;; decoration.
+        (c/html-response 403
+          (views/comment-form-page {:article article :logged-in? (c/logged-in? req)
+                                    :interactivity (db/interactivity (c/ensure-ds))
+                                    :error "Comments are switched off."}))
       (if-not (circuit-breaker/check-and-record!)
         (c/html-response 503
           (views/comment-form-page {:article article :logged-in? (c/logged-in? req)
@@ -81,6 +90,11 @@
                                         :error "All fields are required."}))
             (do
               (db/create-comment! (c/ensure-ds) id ver email display-name body)
+              (db/record-event! (c/ensure-ds)
+                {:kind :comment
+                 :summary (str display-name " commented on \"" (:title article) "\" (v" ver ")")
+                 :detail body
+                 :actor email})
               (future
                 (try
                   (tracker/send-message!
@@ -89,7 +103,7 @@
                     "eighttrigrams.net")
                   (catch Exception e
                     (println "Failed to forward comment to tracker:" (.getMessage e)))))
-              (c/redirect (str "/article/" id "/version/" ver)))))))))
+              (c/redirect (str "/article/" id "/version/" ver))))))))))
 
 (defn confirm-delete-comment-handler [req]
   (c/require-login req
@@ -107,23 +121,35 @@
     (fn [_]
       (let [id (Integer/parseInt (get-in req [:params :id]))
             comment (db/get-comment (c/ensure-ds) id)
-            reason (str/trim (or (get-in req [:form-params "reason"]) ""))]
+            reason (str/trim (or (get-in req [:form-params "reason"]) ""))
+            ;; Silent is opt-in and explicit. Absent the field we still notify,
+            ;; so an older form or a hand-rolled POST cannot quietly suppress
+            ;; the mail the commenter is owed.
+            silent? (= "silent" (get-in req [:form-params "notify"]))]
         (if comment
           (do
             (db/delete-comment! (c/ensure-ds) id)
-            (future
-              (try
-                (let [article (db/get-article-by-version (c/ensure-ds) (:article_id comment) (:article_version comment) {})
-                      article-title (or (:title article) (str "Article " (:article_id comment)))
-                      body (str "Your comment on \"" article-title "\" (v" (:article_version comment) ") has been removed."
-                                (when (not= reason "")
-                                  (str "\n\nReason: " reason))
-                                "\n\nYour comment was:\n\n" (:body comment))]
-                  (mail/send-plain-email! (:email comment)
-                    (str "Comment removed: " article-title)
-                    body))
-                (catch Exception e
-                  (println "Failed to send comment deletion email:" (.getMessage e)))))
+            (db/record-event! (c/ensure-ds)
+              {:kind :comment-deleted
+               :summary (str "Deleted " (:display_name comment) "'s comment")
+               :detail (str (:body comment)
+                            (when (not= reason "") (str "\n\nReason given: " reason)))
+               :actor (:email comment)
+               :notified (if silent? :silent :mailed)})
+            (when-not silent?
+              (future
+                (try
+                  (let [article (db/get-article-by-version (c/ensure-ds) (:article_id comment) (:article_version comment) {})
+                        article-title (or (:title article) (str "Article " (:article_id comment)))
+                        body (str "Your comment on \"" article-title "\" (v" (:article_version comment) ") has been removed."
+                                  (when (not= reason "")
+                                    (str "\n\nReason: " reason))
+                                  "\n\nYour comment was:\n\n" (:body comment))]
+                    (mail/send-plain-email! (:email comment)
+                      (str "Comment removed: " article-title)
+                      body))
+                  (catch Exception e
+                    (println "Failed to send comment deletion email:" (.getMessage e))))))
             (c/redirect (str "/article/" (:article_id comment) "/version/" (:article_version comment))))
           (c/html-response 404
             (views/not-found-page {:logged-in? true})))))))
@@ -174,7 +200,8 @@
       (let [article (db/get-article-by-version (c/ensure-ds) (:article_id comment) (:article_version comment) {})]
         (if article
           (c/html-response 200
-            (views/reply-form-page {:comment comment :article article :logged-in? (c/logged-in? req)}))
+            (views/reply-form-page {:comment comment :article article :logged-in? (c/logged-in? req)
+                                    :interactivity (db/interactivity (c/ensure-ds))}))
           (c/html-response 404
             (views/not-found-page {:logged-in? (c/logged-in? req)}))))
       (c/html-response 404
@@ -190,6 +217,11 @@
         (if (nil? article)
           (c/html-response 404
             (views/not-found-page {:logged-in? (c/logged-in? req)}))
+          (if-not (db/accepting-interaction? (c/ensure-ds))
+            (c/html-response 403
+              (views/reply-form-page {:comment comment :article article :logged-in? (c/logged-in? req)
+                                      :interactivity (db/interactivity (c/ensure-ds))
+                                      :error "Comments are switched off."}))
           (if-not (circuit-breaker/check-and-record!)
             (c/html-response 503
               (views/reply-form-page {:comment comment :article article :logged-in? (c/logged-in? req)
@@ -203,6 +235,12 @@
                                           :error "All fields are required."}))
                 (do
                   (db/create-reply! (c/ensure-ds) comment-id email display-name body)
+                  (db/record-event! (c/ensure-ds)
+                    {:kind :reply
+                     :summary (str display-name " replied to " (:display_name comment)
+                                   " on \"" (:title article) "\"")
+                     :detail body
+                     :actor email})
                   (future
                     (try
                       (tracker/send-message!
@@ -212,4 +250,4 @@
                       (catch Exception e
                         (println "Failed to forward reply to tracker:" (.getMessage e)))))
                   (c/redirect (str "/article/" (:article_id comment) "/version/" (:article_version comment)
-                                   "/comment/" comment-id)))))))))))
+                                   "/comment/" comment-id))))))))))))

@@ -20,6 +20,7 @@
             [et.blog.handler.api :as api-h]
             [et.blog.handler.notes :as notes-h]
             [et.blog.handler.notes-users :as notes-users-h]
+            [et.blog.handler.dashboard :as dashboard-h]
             [nrepl.server :as nrepl]
             [taoensso.telemere :as tel])
   (:gen-class))
@@ -104,6 +105,9 @@
   (GET "/notes/:id/edit" [] notes-h/edit-note-handler)
   (POST "/notes/:id/delete" [] notes-h/delete-note-handler)
   (POST "/notes/:id" [] notes-h/update-note-handler)
+  (GET "/dashboard" [] dashboard-h/dashboard-handler)
+  (POST "/dashboard/settings" [] dashboard-h/update-settings-handler)
+  (POST "/dashboard/unsubscribe" [] dashboard-h/unsubscribe-handler)
   (GET "/notes-users" [] notes-users-h/notes-users-page-handler)
   (POST "/notes-users" [] notes-users-h/create-notes-user-handler)
   (POST "/notes-users/:id/revoke" [] notes-users-h/revoke-notes-user-handler)

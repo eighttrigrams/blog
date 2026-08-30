@@ -753,3 +753,73 @@
                      ORDER BY created_at ASC")]
               comment-ids)
         jdbc-opts))))
+
+;; --- Site settings ---
+;;
+;; A tiny key/value table rather than config, because these are toggled at
+;; runtime from the dashboard: config.prod.edn is baked into the image and
+;; would need a deploy to change.
+
+(def ^:private default-settings
+  {"interactivity" "live"})
+
+(defn get-setting [ds k]
+  (let [conn (get-conn ds)]
+    (or (:value (jdbc/execute-one! conn
+                  ["SELECT value FROM site_settings WHERE key = ?" k]
+                  jdbc-opts))
+        (get default-settings k))))
+
+(defn set-setting! [ds k v]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["INSERT INTO site_settings (key, value, modified_at)
+        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                                       modified_at = excluded.modified_at"
+       k v])))
+
+(def interactivity-levels #{:live :deactivated :hidden})
+
+(defn interactivity
+  "One switch covering comments and subscriptions:
+
+     :live        — both work as normal
+     :deactivated — neither accepts anything new, and visitors are told so
+     :hidden      — as :deactivated, and existing comments are not rendered
+                    at all and nothing says the feature exists
+
+  :hidden implies :deactivated by construction, so the nesting cannot be
+  set wrong."
+  [ds]
+  (let [v (keyword (or (get-setting ds "interactivity") "live"))]
+    (if (interactivity-levels v) v :live)))
+
+(defn accepting-interaction? [ds]
+  (= :live (interactivity ds)))
+
+;; --- Events ---
+;;
+;; An append-only log of everything worth knowing about, so a missed
+;; notification mail is recoverable. It cannot be derived from the other
+;; tables: a deletion or an unsubscribe removes the very row that would have
+;; been the evidence. `notified` records whether anyone was actually told —
+;; "none", "mailed", "silent" or "failed".
+
+(defn record-event! [ds {:keys [kind summary detail actor notified]}]
+  (let [conn (get-conn ds)]
+    (jdbc/execute-one! conn
+      ["INSERT INTO events (kind, summary, detail, actor, notified)
+        VALUES (?, ?, ?, ?, ?)"
+       (name kind) summary (or detail "") (or actor "") (name (or notified :none))])))
+
+(defn list-events
+  ([ds] (list-events ds 200))
+  ([ds limit]
+   (let [conn (get-conn ds)]
+     (jdbc/execute! conn
+       ["SELECT id, kind, summary, detail, actor, notified, created_at
+         FROM events
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?" limit]
+       jdbc-opts))))
