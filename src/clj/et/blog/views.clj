@@ -392,7 +392,7 @@
      [:div.edit-heading
       [:h1 "Edit Note"]
       [:div.edit-actions
-       [:button.btn {:type "submit"} "Save"]
+       [:button.btn {:type "submit" :data-save-chord "1"} "Save"]
        [:a.btn.btn-cancel {:href "/notes"} "Cancel"]]]
      [:div.form-group
       [:label {:for "text"} "Text"]
@@ -706,7 +706,7 @@
        [:div.edit-heading
         [:h1 (if new? "New Article" "Edit Article")]
         [:div.edit-actions
-         [:button.btn {:type "submit"} "Save"]
+         [:button.btn {:type "submit" :data-save-chord "1"} "Save"]
          (when (and (not new?)
                     (or (zero? (or (:version article) 0)) version-published?))
            [:button.btn.btn-publish {:type "submit" :name "save-version" :value "1"
@@ -866,7 +866,7 @@
        [:div.edit-heading
         [:h1 (if new? "New Post" "Edit Post")]
         [:div.edit-actions
-         [:button.btn {:type "submit"} "Save"]
+         [:button.btn {:type "submit" :data-save-chord "1"} "Save"]
          (when-not has-published?
            [:button.btn.btn-publish {:type "submit" :name "publish" :value "1"
                                      :onclick "return confirm('Publish this post?');"}

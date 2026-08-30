@@ -66,7 +66,16 @@ document.addEventListener('keydown',function(e){
   var form=targetForm();
   if(!form)return;
   e.preventDefault();
-  if(form.requestSubmit){form.requestSubmit();}
+  /* Which button the chord means, said out loud in the markup rather than
+     inferred - the same way data-editor marks the fields that want the keymap.
+     The article editor has three submits: Save, "Save new version" (name
+     save-version, and behind a confirm()) and Publish (name publish). The chord
+     means Save. Submitting with no submitter happens to do that today, because
+     Save is the one button without a name, but that is an accident of the
+     markup and not something to rely on. */
+  var save=form.querySelector('[data-save-chord]');
+  if(form.requestSubmit){form.requestSubmit(save||undefined);}
+  else if(save){save.click();}
   else{var b=form.querySelector('button[type="submit"],input[type="submit"]');
        if(b)b.click();}
 });
