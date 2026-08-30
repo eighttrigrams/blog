@@ -2,7 +2,10 @@
   (:require [et.blog.handler.common :as c]
             [et.blog.db :as db]
             [et.blog.views :as views]
-            [et.blog.render :as render]))
+            [et.blog.render :as render]
+            [et.blog.images :as images]
+            [cheshire.core :as json]
+            [clojure.string :as str]))
 
 (defn- resolve-link-preview [link]
   (c/resolve-image-field link :preview_image))
@@ -126,3 +129,62 @@
                                 :article-link (get article-links (:post_id %)))))]
         (c/html-response 200
           (views/deleted-posts-page {:posts posts :logged-in? true}))))))
+
+;; --- the post image upload ---------------------------------------------
+;;
+;; The file arrives as the raw request body with its name in the query string,
+;; not as multipart. ring-core 1.9.6's multipart middleware needs the servlet API,
+;; which is not on this classpath, and bumping ring under a working jetty adapter
+;; to post one file is a trade nobody asked for. A single file needs no envelope.
+;;
+;; Answers JSON rather than redirecting, because the caller is the edit page and a
+;; navigation would take unsaved content with it.
+
+(defn- json-response [status body]
+  {:status status
+   :headers {"Content-Type" "application/json; charset=utf-8"}
+   :body (json/generate-string body)})
+
+(defn- read-capped
+  "The body as bytes, or nil once it goes past the cap. Read rather than trusted:
+  Content-Length is whatever the client claimed."
+  [^java.io.InputStream in cap]
+  (let [out (java.io.ByteArrayOutputStream.)
+        buf (byte-array 65536)]
+    (loop []
+      (let [n (.read in buf)]
+        (cond
+          (neg? n) (.toByteArray out)
+          (> (+ (.size out) n) cap) nil
+          :else (do (.write out buf 0 n) (recur)))))))
+
+(defn upload-post-image-handler [req]
+  (c/require-login req
+    (fn [req]
+      ;; A string key: wrap-params keywordizes nothing, and compojure only
+      ;; keywordizes the route params. :id is a keyword here, "filename" is not.
+      (let [filename (get-in req [:query-params "filename"])]
+        (cond
+          (str/blank? (str filename))
+          (json-response 400 {:error "No filename was sent."})
+
+          ;; The extension decides, not a client-supplied content type: the
+          ;; latter is whatever the caller felt like claiming, and the former is
+          ;; also what the webspace will serve the file back as.
+          (not (images/allowed-extension? filename))
+          (json-response 415 {:error (str "Not an image this accepts: " filename)})
+
+          (not (images/configured?))
+          (json-response 503 {:error "Image upload is not configured on this server."})
+
+          :else
+          (if-let [bytes (read-capped (:body req) images/max-bytes)]
+            (if (zero? (alength bytes))
+              (json-response 400 {:error "The file was empty."})
+              (try
+                (with-open [in (java.io.ByteArrayInputStream. bytes)]
+                  (json-response 200 {:path (images/upload! in filename)}))
+                (catch Exception e
+                  (json-response 502 {:error (str "Upload failed: " (.getMessage e))}))))
+            (json-response 413 {:error (str "Too large. The limit is "
+                                            (quot images/max-bytes (* 1024 1024)) " MB.")})))))))

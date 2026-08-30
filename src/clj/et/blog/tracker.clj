@@ -24,7 +24,9 @@
   server/build-handler with (:tracker config); nil or partial disables
   forwarding, which is the normal case in dev."
   [cfg]
-  (reset! *config cfg))
+  ;; nil rather than the config - see images/configure! for why.
+  (reset! *config cfg)
+  nil)
 
 (defn- encode
   "Body -> JSON. This was hand-rolled and escaped only `\"`, which made every

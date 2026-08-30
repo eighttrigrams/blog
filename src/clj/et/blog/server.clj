@@ -9,6 +9,7 @@
             [et.blog.render :as render]
             [et.blog.tracker :as tracker]
             [et.blog.mail :as mail]
+            [et.blog.images :as images]
             [et.blog.views :as views]
             [et.blog.handler.common :as c]
             [et.blog.handler.auth :as auth-h]
@@ -99,6 +100,7 @@
   (GET "/post/:id/edit" [] posts-h/edit-post-handler)
   (GET "/post/:id/delete" [] posts-h/confirm-delete-post-handler)
   (POST "/post/:id/delete" [] posts-h/delete-post-handler)
+  (POST "/post/:id/image" [] posts-h/upload-post-image-handler)
   (POST "/post/:id" [] posts-h/update-post-handler)
   (GET "/notes" [] notes-h/notes-page-handler)
   (POST "/notes" [] notes-h/create-note-handler)
@@ -141,6 +143,7 @@
     (render/set-image-base-url! base-url))
   (tracker/configure! (:tracker config))
   (mail/configure! (:smtp config))
+  (images/configure! (:ftp config))
   (c/ensure-ds)
   (app (c/prod-mode?)))
 
@@ -154,6 +157,7 @@
       (render/set-image-base-url! base-url))
     (tracker/configure! (:tracker @c/*config))
     (mail/configure! (:smtp @c/*config))
+    (images/configure! (:ftp @c/*config))
     (c/ensure-ds)
     (when-not prod?
       (when-let [nrepl-port (:nrepl-port @c/*config)]

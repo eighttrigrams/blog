@@ -23,7 +23,9 @@
   Called from server/build-handler with (:smtp config); nil or partial
   disables sending, which is the normal case in dev."
   [cfg]
-  (reset! *config cfg))
+  ;; nil rather than the config - see images/configure! for why.
+  (reset! *config cfg)
+  nil)
 
 (defn- smtp-config []
   (let [{:keys [host port user password]} @*config]

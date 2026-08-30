@@ -875,12 +875,25 @@
            [:a.btn.btn-small.btn-danger {:href (str "/post/" (:post_id post) "/delete")} "Delete"])]]
        [:div.form-group
         [:label {:for "image"} "Image"]
-        [:input {:type "text" :name "image" :id "image" :value (or (:image post) "")}]]
+        [:input {:type "text" :name "image" :id "image" :value (or (:image post) "")}]
+        ;; Only for a post that exists: the upload posts to /post/:id/image, and
+        ;; a new post has no id yet. Save first, then upload.
+        (when-not new?
+          [:div#image-upload {:data-post-id (:post_id post)
+                              :style "margin-top: 0.4rem; display: flex; gap: 0.5rem; align-items: center;"}
+           [:input {:type "file" :id "image-file" :accept "image/png,image/jpeg,image/gif,image/webp,image/avif"
+                    :style "font-size: 0.9rem;"}]
+           [:button.btn.btn-small {:type "button" :id "image-upload-btn"} "Upload"]
+           [:span#image-upload-status.muted {:style "font-size: 0.9rem;"}]])]
        [:div.form-group
         [:label {:for "content"} "Content"]
         [:textarea {:name "content" :id "content" :data-editor "1"} (or (:content post) "")]]
       ]
-      (editor-scripts))))
+      (editor-scripts)
+      ;; Posts only. Articles keep their images under blog-images/<article-id>/
+      ;; and are not what this was asked for.
+      (when-not new?
+        [:script {:src "/js/image-upload.js"}]))))
 
 (defn confirm-delete-article-page [{:keys [article logged-in?]}]
   (layout {:title "Delete Article" :logged-in? logged-in?}
