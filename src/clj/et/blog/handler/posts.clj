@@ -5,6 +5,7 @@
             [et.blog.render :as render]
             [et.blog.images :as images]
             [cheshire.core :as json]
+            [taoensso.telemere :as tel]
             [clojure.string :as str]))
 
 (defn- resolve-link-preview [link]
@@ -185,6 +186,14 @@
                 (with-open [in (java.io.ByteArrayInputStream. bytes)]
                   (json-response 200 {:path (images/upload! in filename)}))
                 (catch Exception e
+                  ;; Log it as well as answering with it. The first time this
+                  ;; failed in production `fly logs` had nothing to say, because
+                  ;; the only copy of the reason went to the browser - which is no
+                  ;; use at all when the person who can read the screen and the
+                  ;; person debugging are not in the same place.
+                  (tel/log! :error (str "Post image upload failed for "
+                                        (pr-str filename) ": " (.getMessage e)
+                                        (when-let [d (ex-data e)] (str " " (pr-str d)))))
                   (json-response 502 {:error (str "Upload failed: " (.getMessage e))}))))
             (json-response 413 {:error (str "Too large. The limit is "
                                             (quot images/max-bytes (* 1024 1024)) " MB.")})))))))
