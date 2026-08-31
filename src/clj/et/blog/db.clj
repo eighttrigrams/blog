@@ -823,3 +823,32 @@
          ORDER BY created_at DESC, id DESC
          LIMIT ?" limit]
        jdbc-opts))))
+
+(defn list-all-comments
+  "Every comment anyone has left, newest first, with the title of the article it
+  is on and how many replies it carries. For the dashboard, which is the only
+  place that wants all of them at once.
+
+  The title is joined from the article's own version, because a comment names
+  the version it was left on and an article's title can change between versions -
+  showing today's title against a comment on v1 would misattribute it. A
+  subquery rather than a join, because `articles` holds one row per save and a
+  join on (article_id, version) fans out across all of them - the newest row for
+  that version is the one whose title to show. It stays a subquery rather than a
+  join for the other reason too: a comment on a version that no longer exists
+  still lists, with no title, rather than vanishing from the record of what
+  people said."
+  [ds]
+  (let [conn (get-conn ds)]
+    (jdbc/execute! conn
+      ["SELECT c.id, c.article_id, c.article_version, c.email, c.display_name,
+               c.body, c.created_at,
+               (SELECT a.title FROM articles a
+                 WHERE a.article_id = c.article_id
+                   AND a.version = c.article_version
+                 ORDER BY a.created_at DESC
+                 LIMIT 1) AS article_title,
+               (SELECT COUNT(*) FROM replies r WHERE r.comment_id = c.id) AS reply_count
+        FROM comments c
+        ORDER BY c.created_at DESC, c.id DESC"]
+      jdbc-opts)))

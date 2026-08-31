@@ -952,10 +952,15 @@
 ;; happened. Notes users used to be a page of their own and are now a section
 ;; here.
 
+;; Every section is a <details>, and closed. The dashboard is a page you come to
+;; for one thing at a time, and open it was four screens of scrolling before the
+;; log at the bottom. <details> rather than a script because it costs nothing and
+;; keeps working with JavaScript off - the same reason the subscriber list on
+;; /email has always been one.
 (defn- dash-section [id title & body]
-  [:div.article-section {:id id :style "margin-top: 3rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1.5rem;"}
-   [:h2 {:style "margin-top: 0;"} title]
-   body])
+  [:details.article-section {:id id :style "margin-top: 1.5rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem;"}
+   [:summary {:style "cursor: pointer; font-size: 1.5rem; font-weight: 600; font-family: inherit;"} title]
+   [:div {:style "margin-top: 1rem;"} body]])
 
 (defn- interactivity-form [interactivity]
   [:form {:method "POST" :action "/dashboard/settings"}
@@ -990,6 +995,31 @@
          [:button.btn.btn-small.btn-danger {:type "submit"} "Remove"]]])]
     [:p "Nobody is subscribed."]))
 
+(defn- article-comments-section [comments]
+  (if (seq comments)
+    [:ul {:style "list-style: none; padding: 0;"}
+     (for [{:keys [id article_id article_version article_title email display_name
+                   body created_at reply_count]} comments]
+       [:li {:style "margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,0,0,0.06);"}
+        [:div.muted {:style "font-size: 0.85rem;"}
+         (human-date created_at)
+         " · on "
+         ;; The title as it read on the version commented on, not as it reads
+         ;; now - see db/list-all-comments.
+         [:a {:href (str "/article/" article_id "/version/" article_version
+                         "/comment/" id)}
+          (or article_title (str "article " article_id))]
+         (str " (v" article_version ")")
+         (when (pos? (or reply_count 0))
+           (str " · " reply_count " " (if (= 1 reply_count) "reply" "replies")))]
+        [:div {:style "margin-top: 0.2rem;"}
+         [:strong display_name]
+         [:span.muted {:style "font-size: 0.85rem;"} (str " <" email ">")]]
+        [:div.article-content {:style "margin-top: 0.3rem;"} (h/raw (render/markdown->html body))]
+        [:div {:style "margin-top: 0.4rem;"}
+         [:a.btn.btn-small.btn-danger {:href (str "/comments/" id "/delete")} "Delete"]]])]
+    [:p "Nobody has commented."]))
+
 (defn- events-section [events]
   (if (seq events)
     [:ul {:style "list-style: none; padding: 0;"}
@@ -1009,7 +1039,7 @@
     [:p "Nothing has happened yet."]))
 
 (defn dashboard-page
-  [{:keys [logged-in? notes-users created error notice subscribers events interactivity]}]
+  [{:keys [logged-in? notes-users created error notice subscribers events comments interactivity]}]
   (layout {:title "Dashboard" :logged-in? logged-in?}
     [:h1 "Dashboard"]
     (when error [:p.error error])
@@ -1059,9 +1089,17 @@
     (dash-section "subscribers" (str "Subscribers (" (count subscribers) ")")
       (subscribers-section subscribers))
 
+    (dash-section "comments" (str "Comments (" (count comments) ")")
+      [:p.muted "Everything anyone has left on an article, newest first. The "
+       "email is here because it is not shown anywhere public, and deleting a "
+       "comment is where the choice to tell them - or not - lives."]
+      (article-comments-section comments))
+
     (dash-section "events" "Log"
       [:p.muted "Everything worth knowing about, newest first — the fallback "
        "for a notification mail that never arrived. Deletions and unsubscribes "
        "are here too, which is why this is a log and not a view over the "
        "other tables: those rows are gone."]
-      (events-section events))))
+      (events-section events))
+
+    [:script {:src "/js/dashboard.js"}]))

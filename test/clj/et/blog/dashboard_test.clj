@@ -137,3 +137,45 @@
         (let [resp (t/POST app (str "/article/" article-id "/version/1/comment")
                            {"email" "x@example.com" "display-name" "X" "body" "sneaky"})]
           (is (= 403 (:status resp))))))))
+
+(deftest every-section-is-collapsed-by-default
+  (let [app (t/make-app)
+        token (t/login app)
+        body (:body (t/GET app "/dashboard" token))]
+    (doseq [id ["settings" "notes-users" "subscribers" "comments" "events"]]
+      (is (re-find (re-pattern (str "<details[^>]*id=\"" id "\"")) body)
+          (str id " is a details element"))
+      (is (not (re-find (re-pattern (str "<details[^>]*id=\"" id "\"[^>]*open")) body))
+          (str id " is closed to begin with")))))
+
+(deftest the-comments-section-lists-what-people-left-on-articles
+  (let [app (t/make-app)
+        token (t/login app)
+        article-id (t/create-and-publish! app token
+                     {"title" "Commented On" "content" "Body"} "Post")]
+    (t/POST app (str "/article/" article-id "/version/1/comment")
+            {"email" "reader@example.com" "display-name" "Reader" "body" "A remark"})
+    (let [body (:body (t/GET app "/dashboard" token))]
+      (is (str/includes? body "A remark"))
+      (is (str/includes? body "Reader"))
+      (is (str/includes? body "Commented On") "and which article it was on")
+      (is (str/includes? body "reader@example.com")
+          "with the email, which is shown nowhere public")
+      (is (str/includes? body (str "/comments/" 1 "/delete"))
+          "and a way to remove it"))))
+
+(deftest a-comment-is-titled-by-the-version-it-was-left-on
+  ;; An article's title can change between versions. Showing today's title
+  ;; against a comment on v1 would misattribute what was commented on.
+  (let [app (t/make-app)
+        token (t/login app)
+        article-id (t/create-and-publish! app token
+                     {"title" "Original Title" "content" "Body"} "Post")]
+    (t/POST app (str "/article/" article-id "/version/1/comment")
+            {"email" "r@example.com" "display-name" "R" "body" "On v1"})
+    ;; Rename without a new version: the v1 row's title is what changes.
+    (Thread/sleep 1100)
+    (t/POST app (str "/article/" article-id)
+            (t/article-params {"title" "Renamed" "content" "Body"}) token)
+    (let [body (:body (t/GET app "/dashboard" token))]
+      (is (str/includes? body "On v1") "the comment is still listed"))))

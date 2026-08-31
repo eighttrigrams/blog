@@ -16,6 +16,7 @@
           :notes-users (db/list-notes-users (c/ensure-ds))
           :subscribers (db/list-email-subscribers (c/ensure-ds))
           :events (db/list-events (c/ensure-ds))
+          :comments (db/list-all-comments (c/ensure-ds))
           :interactivity (db/interactivity (c/ensure-ds))}
          opts))
 
