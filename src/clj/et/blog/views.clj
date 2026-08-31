@@ -891,12 +891,19 @@
                    :style "font-size: 0.9rem;"}]
           [:button.btn.btn-small {:type "button" :id "image-upload-btn"} "Upload"]
           [:span#image-upload-status.muted {:style "font-size: 0.9rem;"}]])
+       ;; What is already on the webspace for this post, whether or not the post
+       ;; points at any of it. Filled in by a fetch rather than rendered here: it
+       ;; costs an FTP round trip, and the edit page should not wait on one.
+       (when-not new?
+         [:div#post-files {:data-post-id (:post_id post)
+                           :style "margin-top: 0.75rem; font-size: 0.9rem;"}])
       ]
       (editor-scripts)
       ;; Posts only. Articles keep their images under blog-images/<article-id>/
       ;; and are not what this was asked for.
       (when-not new?
-        [:script {:src "/js/image-upload.js"}]))))
+        (list [:script {:src "/js/image-upload.js"}]
+              [:script {:src "/js/post-files.js"}])))))
 
 (defn confirm-delete-article-page [{:keys [article logged-in?]}]
   (layout {:title "Delete Article" :logged-in? logged-in?}

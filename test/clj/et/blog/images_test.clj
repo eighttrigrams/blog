@@ -90,3 +90,28 @@
       ;; 503 rather than a stack trace, and crucially it is reached only after
       ;; the extension check - so an unconfigured server still refuses .php.
       (is (= 503 (at "?filename=ok.png"))))))
+
+;; --- the listing --------------------------------------------------------
+
+(deftest listing-is-scoped-the-same-way-uploading-is
+  (testing "an unconfigured server lists nothing rather than throwing"
+    (images/configure! nil)
+    (is (nil? (images/list-post-files 71))))
+  (testing "and it refuses a post id that is not an integer"
+    (images/configure! {:host "h" :username "u" :password "p"})
+    (doseq [bad ["71" "../evil" nil]]
+      (is (thrown? clojure.lang.ExceptionInfo (images/post-prefix bad))
+          (pr-str bad)))))
+
+(deftest the-listing-endpoint-is-owner-only-and-validates-the-id
+  (let [app (t/make-app)
+        token (t/login app)]
+    (is (contains? #{302 401 403} (:status (t/GET app "/post/1/images" nil)))
+        "a visitor cannot enumerate the webspace")
+    (is (= 400 (:status (t/GET app "/post/not-a-number/images" token))))
+    (testing "and with nothing configured it answers an empty list, not an error"
+      ;; Every dev laptop is in this state, and an editor that shouts about it
+      ;; on every page load would be worse than one that says nothing.
+      (let [resp (t/GET app "/post/1/images" token)]
+        (is (= 200 (:status resp)))
+        (is (str/includes? (:body resp) "\"unconfigured\":true"))))))

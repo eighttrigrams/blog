@@ -100,6 +100,7 @@
   (GET "/post/:id/edit" [] posts-h/edit-post-handler)
   (GET "/post/:id/delete" [] posts-h/confirm-delete-post-handler)
   (POST "/post/:id/delete" [] posts-h/delete-post-handler)
+  (GET "/post/:id/images" [] posts-h/list-post-images-handler)
   (POST "/post/:id/image" [] posts-h/upload-post-image-handler)
   (POST "/post/:id" [] posts-h/update-post-handler)
   (GET "/notes" [] notes-h/notes-page-handler)

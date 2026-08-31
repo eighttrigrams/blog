@@ -211,3 +211,30 @@
                   (json-response 502 {:error (str "Upload failed: " (.getMessage e))}))))
             (json-response 413 {:error (str "Too large. The limit is "
                                             (quot images/max-bytes (* 1024 1024)) " MB.")})))))))
+
+(defn list-post-images-handler
+  "GET /post/:id/images — what is on the webspace for this post. Answers a list
+  so the edit page can show files that exist but are not the post's image, which
+  is otherwise invisible: nothing on the site links them and only an FTP client
+  would find them."
+  [req]
+  (c/require-login req
+    (fn [req]
+      (let [post-id (try (Integer/parseInt (get-in req [:params :id]))
+                         (catch Exception _ nil))]
+        (cond
+          (nil? post-id)
+          (json-response 400 {:error "Not a post id."})
+
+          (not (images/configured?))
+          ;; Not an error on a machine that simply has no FTP credential, which
+          ;; is every dev laptop. The page shows nothing and says why.
+          (json-response 200 {:files [] :unconfigured true})
+
+          :else
+          (try
+            (json-response 200 {:files (images/list-post-files post-id)})
+            (catch Exception e
+              (tel/log! :error (str "Listing post images failed for " post-id
+                                    ": " (.getMessage e)))
+              (json-response 502 {:error (str "Could not list files: " (.getMessage e))}))))))))

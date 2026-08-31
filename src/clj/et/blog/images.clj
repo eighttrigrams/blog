@@ -6,10 +6,11 @@
   renames, deletes and backs up, and it is host-only on purpose - its secrets.clj
   says a tool holding write access to the webspace should not be reachable from
   the internet. This runs in production, so it gets one verb and one place: store
-  a file under blog-images/posts/<post-id>/. There is no listing, no rename and
-  no delete, and no way to *name* a directory: the prefix is a constant and the
-  only variable is a post id, which the caller coerces to an integer before it
-  gets here - so a path cannot be smuggled through it.
+  a file under blog-images/posts/<post-id>/, and read back what is in that one
+  directory. There is no rename and no delete, nothing outside a post's own
+  folder, and no way to *name* a directory: the prefix is a constant and the only
+  variable is a post id, which the caller coerces to an integer before it gets
+  here - so a path cannot be smuggled through it.
 
   What is actually at stake is smaller than it first looks: the FTP login is
   jailed by the server to /daniel-de-oliveira.com/, which is the public web root
@@ -18,7 +19,7 @@
   which is the larger prize of the two."
   (:require [clojure.string :as str]
             [taoensso.telemere :as tel])
-  (:import [org.apache.commons.net.ftp FTP FTPSClient FTPReply]
+  (:import [org.apache.commons.net.ftp FTP FTPFile FTPSClient FTPReply]
            [java.io InputStream]))
 
 (defonce ^:private *config (atom nil))
@@ -163,6 +164,40 @@
             (throw (ex-info (str "FTP refused the upload - " reply)
                             {:path remote :reply reply}))))
         (str dir "/" name)
+        (finally
+          (try (.logout client) (catch Exception _))
+          (try (.disconnect client) (catch Exception _)))))))
+
+(defn list-post-files
+  "What is in a post's image directory: {:name :size :path} each, newest first.
+  Empty when the post has no directory yet, which is the normal case - a post
+  that never had an image uploaded has no folder, and that is not an error.
+
+  Read-only, and scoped exactly like upload!: one directory, named by a constant
+  prefix and an integer. It exists so an image uploaded and then unlinked from
+  the post is still findable, rather than being invisible litter on the webspace."
+  [post-id]
+  (when (configured?)
+    (let [dir (post-prefix post-id)
+          client (open @*config)]
+      (try
+        (let [entries (or (seq (.mlistDir client (str "/" dir)))
+                          (seq (.listFiles client (str "/" dir))))]
+          (->> entries
+               (remove #(#{"." ".."} (.getName ^FTPFile %)))
+               (filter #(.isFile ^FTPFile %))
+               (map (fn [^FTPFile f]
+                      {:name (.getName f)
+                       :size (.getSize f)
+                       :modified (some-> (.getTimestamp f) .getTimeInMillis)
+                       :path (str dir "/" (.getName f))}))
+               (sort-by :modified #(compare %2 %1))
+               vec))
+        (catch Exception _
+          ;; A directory that is not there lists as an error on some servers and
+          ;; as nothing on others. Neither is worth surfacing: the answer to
+          ;; "what has this post got?" is then "nothing".
+          [])
         (finally
           (try (.logout client) (catch Exception _))
           (try (.disconnect client) (catch Exception _)))))))

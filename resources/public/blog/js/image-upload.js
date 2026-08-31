@@ -51,6 +51,8 @@ function upload(){
       field.dispatchEvent(new Event('change',{bubbles:true}));
       say('Uploaded. Save to keep it.');
       file.value='';
+      /* The file list below is now out of date by exactly one file. */
+      if(window.BlogPostFiles)window.BlogPostFiles.reload();
     })
     .catch(function(){
       button.disabled=false;
