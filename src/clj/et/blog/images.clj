@@ -6,9 +6,10 @@
   renames, deletes and backs up, and it is host-only on purpose - its secrets.clj
   says a tool holding write access to the webspace should not be reachable from
   the internet. This runs in production, so it gets one verb and one place: store
-  a file under blog-images/posts/<today>/. There is no listing, no rename, no
-  delete, and no way to name a directory - the date comes from the clock and the
-  prefix is a constant, so a caller cannot steer a write anywhere else.
+  a file under blog-images/posts/<post-id>/. There is no listing, no rename and
+  no delete, and no way to *name* a directory: the prefix is a constant and the
+  only variable is a post id, which the caller coerces to an integer before it
+  gets here - so a path cannot be smuggled through it.
 
   What is actually at stake is smaller than it first looks: the FTP login is
   jailed by the server to /daniel-de-oliveira.com/, which is the public web root
@@ -18,8 +19,7 @@
   (:require [clojure.string :as str]
             [taoensso.telemere :as tel])
   (:import [org.apache.commons.net.ftp FTP FTPSClient FTPReply]
-           [java.io InputStream]
-           [java.time LocalDate]))
+           [java.io InputStream]))
 
 (defonce ^:private *config (atom nil))
 
@@ -46,11 +46,18 @@
 
 (def max-bytes (* 8 1024 1024))
 
-(defn today-prefix
-  "The one directory this can write to, derived from the clock rather than from
-  anything a caller sends."
-  []
-  (str "blog-images/posts/" (str (LocalDate/now))))
+(defn post-prefix
+  "The one directory this can write to for a given post. `post-id` must already
+  be an integer - the handler parses it out of the route - so the whole path is
+  a constant prefix plus a number and there is nothing here a caller can steer.
+
+  Keyed by post rather than by date, which is also how articles have always done
+  it (blog-images/<article-id>/...). Existing rows under the old dated
+  directories are untouched: they store their own path and keep resolving."
+  [post-id]
+  (when-not (integer? post-id)
+    (throw (ex-info "post-id must be an integer" {:post-id post-id})))
+  (str "blog-images/posts/" post-id))
 
 (defn extension [filename]
   (let [n (str/lower-case (or filename ""))
@@ -128,15 +135,15 @@
             segments)))
 
 (defn upload!
-  "Store `stream` as `filename` under today's post directory. Returns the
+  "Store `stream` as `filename` under the post's own image directory. Returns the
   relative path the post's image field wants - the same shape the existing rows
   carry - or throws. Returns nil, loudly, when no credential is configured."
-  [^InputStream stream filename]
+  [^InputStream stream filename post-id]
   (if-not (configured?)
     (tel/log! :error
       (str "FTP is not configured - refusing to upload " (pr-str filename) ". "
            "Set :ftp {:host .. :username .. :password ..} under :apps :blog."))
-    (let [dir (today-prefix)
+    (let [dir (post-prefix post-id)
           name (safe-name filename)
           remote (str "/" dir "/" name)
           client (open @*config)]

@@ -162,10 +162,24 @@
 (defn upload-post-image-handler [req]
   (c/require-login req
     (fn [req]
-      ;; A string key: wrap-params keywordizes nothing, and compojure only
-      ;; keywordizes the route params. :id is a keyword here, "filename" is not.
-      (let [filename (get-in req [:query-params "filename"])]
+      ;; A string key for the query parameter: wrap-params keywordizes nothing,
+      ;; and compojure only keywordizes the route params. :id is a keyword here,
+      ;; "filename" is not.
+      (let [filename (get-in req [:query-params "filename"])
+            ;; Parsed, not passed through. The post id is now part of the remote
+            ;; directory, so a value straight off the URL would be a way to name
+            ;; one - an integer cannot be.
+            post-id (try (Integer/parseInt (get-in req [:params :id]))
+                         (catch Exception _ nil))]
         (cond
+          (nil? post-id)
+          (json-response 400 {:error "Not a post id."})
+
+          ;; No point creating a directory for a post that does not exist, and
+          ;; it keeps the webspace free of folders for ids nobody ever had.
+          (nil? (db/get-post (c/ensure-ds) post-id {:include-deleted? true}))
+          (json-response 404 {:error "No such post."})
+
           (str/blank? (str filename))
           (json-response 400 {:error "No filename was sent."})
 
@@ -184,7 +198,7 @@
               (json-response 400 {:error "The file was empty."})
               (try
                 (with-open [in (java.io.ByteArrayInputStream. bytes)]
-                  (json-response 200 {:path (images/upload! in filename)}))
+                  (json-response 200 {:path (images/upload! in filename post-id)}))
                 (catch Exception e
                   ;; Log it as well as answering with it. The first time this
                   ;; failed in production `fly logs` had nothing to say, because

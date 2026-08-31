@@ -40,15 +40,20 @@
     ;; daniel-de-oliveira.com where it would run as that origin.
     (is (not (images/allowed-extension? "logo.svg")))))
 
-(deftest the-target-directory-comes-from-the-clock-not-the-caller
-  (let [prefix (images/today-prefix)]
-    (is (re-matches #"blog-images/posts/\d{4}-\d{2}-\d{2}" prefix)
-        "always today's post directory, and nothing else is expressible")))
+(deftest the-target-directory-is-a-constant-prefix-plus-a-post-id
+  (is (= "blog-images/posts/71" (images/post-prefix 71)))
+  (testing "and it refuses anything that is not an integer"
+    ;; The id reaches this from the URL, so if a string got through it would be
+    ;; a way to name a directory. The handler parses it; this refuses to be the
+    ;; second line of defence by accident.
+    (doseq [bad ["71" "../evil" nil "71/../.." 7.5]]
+      (is (thrown? clojure.lang.ExceptionInfo (images/post-prefix bad))
+          (pr-str bad)))))
 
 (deftest an-unconfigured-uploader-refuses-loudly-rather-than-throwing
   (images/configure! nil)
   (is (false? (images/configured?)))
-  (is (nil? (images/upload! (java.io.ByteArrayInputStream. (byte-array 3)) "a.png"))))
+  (is (nil? (images/upload! (java.io.ByteArrayInputStream. (byte-array 3)) "a.png" 71))))
 
 (deftest a-partial-credential-counts-as-none
   (doseq [partial [{:host "h"} {:host "h" :username "u"} {:username "u" :password "p"} {}]]
@@ -65,12 +70,23 @@
 
 (deftest the-endpoint-refuses-what-it-should-before-it-connects
   (let [app (t/make-app)
-        token (t/login app)]
+        token (t/login app)
+        ;; A real post, so the id in the path is one that exists.
+        post-id (-> (t/POST app "/posts"
+                            {"content" "Body" "footnotes" "" "image" ""}
+                            token)
+                    t/redirect-location
+                    (str/replace "/post/" ""))
+        at (fn [q] (:status (t/POST app (str "/post/" post-id "/image" q) {} token)))]
+    (testing "not a post id"
+      (is (= 400 (:status (t/POST app "/post/not-a-number/image?filename=a.png" {} token)))))
+    (testing "a post that does not exist"
+      (is (= 404 (:status (t/POST app "/post/99999/image?filename=a.png" {} token)))))
     (testing "no filename"
-      (is (= 400 (:status (t/POST app "/post/1/image" {} token)))))
+      (is (= 400 (at ""))))
     (testing "not an image"
-      (is (= 415 (:status (t/POST app "/post/1/image?filename=evil.php" {} token)))))
+      (is (= 415 (at "?filename=evil.php"))))
     (testing "an accepted name, but nothing configured to upload with"
       ;; 503 rather than a stack trace, and crucially it is reached only after
       ;; the extension check - so an unconfigured server still refuses .php.
-      (is (= 503 (:status (t/POST app "/post/1/image?filename=ok.png" {} token)))))))
+      (is (= 503 (at "?filename=ok.png"))))))
