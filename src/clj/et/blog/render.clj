@@ -91,6 +91,39 @@
     (str/replace html #"(src=\")(blog-images/)" (fn [[_ pre path]] (str pre base "/" path)))
     html))
 
+;; Self-hosted video. A markdown image whose target is an .mp4 becomes a
+;; <video>, so a clip drops into the prose exactly where a still would.
+;;
+;; Videos sit under blog-images/ beside the stills a post already has, rather
+;; than in a blog-videos/ of their own. The name reads slightly off for an mp4,
+;; and it buys three things: resolve-image-paths above needs no widening, a
+;; post's media stays in one directory to back up and delete together, and the
+;; edit page's file list shows an uploaded clip with no work.
+;;
+;; Same shape as embed-youtube below — a pass over the rendered HTML — because
+;; flexmark runs with ESCAPE_HTML true, so a raw <video> tag written in a post is
+;; escaped. That has to stay: comments and replies are markdown from the public,
+;; so the tag must be generated here, never authored there.
+(def ^:private video-src-pattern
+  #"<img src=\"([^\"]+\.(?:mp4|webm|m4v))\"[^>]*>")
+
+(def ^:private video-link-pattern
+  #"<a href=\"([^\"]+\.(?:mp4|webm|m4v))\"[^>]*>[^<]*</a>")
+
+(defn- video-tag [url]
+  ;; preload="metadata" for the same reason music's audio player uses it: an
+  ;; index page of posts should cost a few small requests, not a download each.
+  (str "<video controls playsinline preload=\"metadata\""
+       " style=\"display:block;width:100%;height:auto;margin:1.5rem 0;background:#000;\""
+       " src=\"" url "\">"
+       "<a href=\"" url "\">Download the video</a>"
+       "</video>"))
+
+(defn- embed-video [html]
+  (-> html
+      (str/replace video-src-pattern (fn [[_ url]] (video-tag url)))
+      (str/replace video-link-pattern (fn [[_ url]] (video-tag url)))))
+
 (def ^:private youtube-url-pattern
   #"(?:<a [^>]*href=\")?https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)[^\"<\s]*(?:\"[^>]*>[^<]*</a>)?")
 
@@ -122,6 +155,7 @@
         html (or (markdown->html processed) "")
         html (replace-footnote-refs html ref-order def-map)
         html (resolve-image-paths html)
+        html (embed-video html)
         html (embed-youtube html)
         footnotes-html (render-footnotes-html ref-ids def-map)]
     (str html (or footnotes-html ""))))
