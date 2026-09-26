@@ -35,6 +35,21 @@ function zenOpen(){
   return !!(zen&&zen.style.display!=='none');
 }
 
+/* A key pressed inside a CodeMirror this file did not mount is not this file's
+   to answer. On /notes that is the Note being edited where it stands: notes.js
+   mounts it on the click, it belongs to no form, and notes.js already gives
+   Escape and the save chord their meaning there - save that Note and read it
+   again. Answering as well meant the chord fell through targetForm()'s
+   no-editor-focused branch to the page's first form and submitted an empty Add
+   Note, and Escape walked the page back in history under the save. */
+function foreign(e){
+  var t=e.target,
+      cm=t&&t.closest?t.closest('.cm-editor'):null;
+  if(!cm)return false;
+  for(var n in views){if(views[n].dom===cm)return false;}
+  return true;
+}
+
 function targetForm(){
   var view=focused(),name=null;
   if(view){for(var n in views){if(views[n]===view){name=n;break;}}}
@@ -81,7 +96,7 @@ function submitSave(form){
 
 document.addEventListener('keydown',function(e){
   if(!saveChord(e))return;
-  if(zenOpen())return;
+  if(zenOpen()||foreign(e))return;
   var form=targetForm();
   if(!form)return;
   e.preventDefault();
@@ -197,7 +212,7 @@ document.addEventListener('keydown',function(e){
   }
   if(e.key!=='Escape')return;
   if(e.metaKey||e.ctrlKey||e.altKey||e.shiftKey)return;
-  if(zenOpen())return;
+  if(zenOpen()||foreign(e))return;
   if(!escapeForm)return;
   e.preventDefault();
   if(diverged())openModal();else leave();
