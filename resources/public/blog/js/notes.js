@@ -37,29 +37,14 @@ function partsOf(item){
 }
 
 /* The bundle takes an editor's whole shape off the textarea it replaces - font,
-   padding, border, and the height, all read at mount - which is why one of these
-   looks like the Add Note box above it. The height it would read is a form
-   field's, so set it first: a Note opens at the height of what it says, and
-   clicking one does not shove the rest of the box down the page.
+   padding and border - which is why one of these looks like the Add Note box
+   above it. Not its height: the CSS takes that back off the editor, so a Note
+   opens as tall as what it says and grows and shrinks as you write.
 
-   From there it is the drag handle's job (see the CSS): the editor does not grow
-   as you write, exactly like every other textarea here. */
-function fit(area){
-  /* Flattened first, because scrollHeight never reports less than the box it is
-     read from: measured at its natural height a one-line Note would come back
-     two rows tall, which is the default size of an empty textarea. */
-  area.style.height='0';
-  /* box-sizing is border-box, and scrollHeight is content plus padding without
-     the border - so without the two pixels a line that fits would scroll. */
-  area.style.height=(area.scrollHeight+2)+'px';
-}
-
-/* Mounted once and kept: re-mounting would mean unpicking what fromTextarea did
-   to the textarea, and keeping it means a Note dragged taller stays that way
-   while the page is open. */
+   Mounted once and kept: re-mounting would mean unpicking what fromTextarea did
+   to the textarea. */
 function editorFor(p){
   if(!mounted[p.id]){
-    fit(p.area);
     mounted[p.id]=window.IJKL.fromTextarea(p.area,window.CM6);
   }
   return mounted[p.id];

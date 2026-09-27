@@ -206,13 +206,13 @@
           (is (= 1 (count marked)) "only the Add Note box carries the marker")))
       (testing "and the script that does it is asked for"
         (is (str/includes? (:body resp) "/js/notes.js")))
-      ;; That the drag actually resizes is a browser matter — see the report.
-      ;; What is here is that it is asked for, and vertically only, as every
-      ;; other textarea on the site is.
-      (testing "the editor can be dragged taller, and only taller"
-        (is (re-find #"\.note-editor \.cm-editor \{[^}]*resize: vertical" (:body resp)))
-        (testing "which a box whose overflow is visible is not allowed to be"
-          (is (re-find #"\.note-editor \.cm-editor \{[^}]*overflow: hidden" (:body resp))))))))
+      ;; That it actually grows is a browser matter, checked in one. What is
+      ;; here is that the fixed height the bundle copies off the textarea is
+      ;; taken back, which is the whole of what makes CodeMirror grow.
+      (testing "the editor grows with the Note rather than keeping the height it opened at"
+        (is (re-find #"\.note-editor \.cm-editor \{[^}]*height: auto" (:body resp)))
+        (testing "and has no drag handle, which would pin the height again"
+          (is (not (re-find #"\.note-editor \.cm-editor \{[^}]*resize" (:body resp)))))))))
 
 (deftest an-inline-save-is-the-form-post-without-the-navigation
   (let [app (t/make-app)

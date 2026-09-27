@@ -93,13 +93,15 @@
         .note-text { margin-top: 0.5rem; }
         .note-text > :first-child { margin-top: 0; }
         /* A Note being edited where it stands. The editor takes its look off the
-           textarea it replaces — the bundle copies font, padding and border — so
-           all that is wanted here is the drag handle: vertical only, as on every
-           other textarea on the site. `overflow` is not decoration; `resize` does
-           nothing on a box whose overflow is visible, and hidden rather than auto
-           because the scrolling inside is CodeMirror's own to do. */
+           textarea it replaces — the bundle copies font, padding and border, and
+           the height as a fixed number of pixels. That last one is undone here:
+           a CodeMirror with no height of its own grows with what is in it, so the
+           Note is as tall as what it says, whether that was typed before the
+           click or after. Two classes, so this outranks the one-class rule the
+           bundle's theme writes the height into. No drag handle any more: there
+           is nothing left for it to do, and a drag would pin the height again. */
         .note-editor { margin-top: 0.5rem; }
-        .note-editor .cm-editor { resize: vertical; overflow: hidden; }
+        .note-editor .cm-editor { height: auto; }
         .article-section { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; }
         .article-section h3 { font-size: 1rem; font-weight: 600; font-style: italic; color: rgba(0,0,0,0.65); margin-bottom: 0; }
         .footnotes { margin-top: 2rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
@@ -371,8 +373,9 @@
            ;; load", and there is one of these per Note in the box. notes.js
            ;; mounts the one being edited, and only when it is being edited.
            ;; `min-height: 0` because the page-wide 300px is meant for a form
-           ;; field the size of an Article, and CodeMirror takes the height it
-           ;; finds on the textarea it replaces.
+           ;; field the size of an Article. The editor grows with the Note (see
+           ;; the CSS), but this textarea stays behind it, invisible and sized to
+           ;; it — and 300px would stretch it out past the editor's bottom edge.
            [:div.note-editor {:style "display: none;"}
             [:textarea {:name "text" :style "min-height: 0;"} text]]])]
        [:p "The Notes box is empty."])]
