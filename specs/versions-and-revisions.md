@@ -63,8 +63,17 @@ Feature: Save new version
     Given v2 has no revisions after its announcement
     And the form has no unsaved changes
     When I click "Save new version"
-    Then it is refused: "Nothing changed since v2 was announced"
+    Then no new version is created, and no revision either
     And v2 stays as announced
+    And I am told: "No new version: the text has not changed since v2 was announced. Abstract, categories and preview image are saved."
+
+  Scenario: Only abstract, categories or preview image changed
+    Given v2 has no revisions after its announcement
+    And I changed only the abstract
+    When I click "Save new version"
+    Then the abstract is saved
+    And no new version is created, and no revision either
+    And I am told the same as above
 
   Scenario: Not twice in a row
     Given v3 exists and is not announced yet
