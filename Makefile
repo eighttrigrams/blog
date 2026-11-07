@@ -1,11 +1,12 @@
 .PHONY: restart deploy backup backup-replay test
 
 # Kills by what it is, not by where it listens. It used to kill port 3028 —
-# blog's port back when it ran on its own, and still the default in
-# scripts/start.sh — while the server has listened on config.edn's 3130 since
-# blog joined the plurama umbrella. So it killed nothing, the new JVM died with
-# "Address in use", and the old one carried on serving, which reads exactly like
-# a restart that worked.
+# blog's port back when it ran on its own — while the server has listened on
+# config.edn's 3130 since blog joined the plurama umbrella. So it killed
+# nothing, the new JVM died with "Address in use", and the old one carried on
+# serving, which reads exactly like a restart that worked. (scripts/start.sh
+# reads the port from config.edn too since 5f92493; 3130 is the dev port
+# everywhere, and the workspace README's port table is the authority.)
 #
 # The brackets are not decoration. `pkill -f` matches against whole command
 # lines, and this recipe is itself a command line containing the pattern — so a
