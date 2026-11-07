@@ -69,7 +69,7 @@ Feature: Save new version
   Scenario: Not twice in a row
     Given v3 exists and is not announced yet
     When I click "Save new version"
-    Then it is refused: "Publish v3 before starting a new version"
+    Then it is refused: "Publish the current version before bumping to a new one."
 
 Feature: Save new version on a draft
 
