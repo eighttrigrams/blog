@@ -66,21 +66,6 @@
                  jdbc-opts)]
     (or (:version result) 0)))
 
-(defn revised-since-announcement?
-  "Whether the article's last revision was made strictly after the announcement
-  of the version it belongs to. The announcement is the first row of that
-  version's post. False when the version has no announcement."
-  [ds article-id]
-  (some? (jdbc/execute-one! (get-conn ds)
-           ["SELECT 1 FROM articles a
-             WHERE a.article_id = ?
-               AND a.created_at = (SELECT MAX(created_at) FROM articles WHERE article_id = a.article_id)
-               AND a.created_at > (SELECT MIN(p.created_at) FROM article_posts ap
-                                   INNER JOIN posts p ON p.post_id = ap.post_id
-                                   WHERE ap.article_id = a.article_id AND ap.article_version = a.version)"
-            article-id]
-           jdbc-opts)))
-
 (defn update-article! [ds article-id {:keys [title subtitle content footnotes addenda preamble preview-image abstract topics publish? bump-version? post-content]}]
   (let [conn (get-conn ds)
         current (jdbc/execute-one! conn
@@ -101,17 +86,22 @@
                   (and bump-version? article-changed?))
         ;; "Save new version" with nothing new in the form: the last revision
         ;; itself moves on, a draft's always, an announced version's only if it
-        ;; came after the announcement. Its created_at and text stay.
-        move? (and bump-version? (not article-changed?)
-                   (or (zero? cur) (revised-since-announcement? ds article-id)))
+        ;; came after the announcement (its post's first row). Its created_at
+        ;; and text stay. One statement with every condition in its WHERE, so a
+        ;; save landing since `current` was read makes it match nothing.
+        moved? (and bump-version? (not article-changed?)
+                    (pos? (::jdbc/update-count
+                           (jdbc/execute-one! conn
+                             ["UPDATE articles SET version = ?
+                               WHERE article_id = ? AND created_at = ? AND version = ?
+                                 AND created_at = (SELECT MAX(created_at) FROM articles WHERE article_id = ?)
+                                 AND (version = 0
+                                      OR created_at > (SELECT MIN(p.created_at) FROM article_posts ap
+                                                       INNER JOIN posts p ON p.post_id = ap.post_id
+                                                       WHERE ap.article_id = ? AND ap.article_version = ?))"
+                              (inc cur) article-id (:created_at current) cur article-id article-id cur]))))
         version (if bump? (inc cur) cur)
         need-new-row? (or bump? article-changed?)]
-    (when move?
-      (jdbc/execute-one! conn
-        (sql/format {:update :articles
-                     :set {:version (inc cur)}
-                     :where [:and [:= :article_id article-id]
-                                  [:= :created_at (:created_at current)]]})))
     (when need-new-row?
       (jdbc/execute-one! conn
         (sql/format {:insert-into :articles
@@ -158,7 +148,9 @@
                        :values [{:article_id article-id
                                  :article_version version
                                  :post_id post-id}]})
-          jdbc-opts)))))
+          jdbc-opts)))
+    ;; Whether a revision was written or moved; meta alone does not count.
+    (or need-new-row? moved?)))
 
 (def ^:private article-cols [:article_id :title :subtitle :content :footnotes :addenda :preamble :created_at :version])
 

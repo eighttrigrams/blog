@@ -117,13 +117,10 @@
                        (c/text-response 400 reason)
                        (c/html-response 400 (page-fn))))
             skip-post? (= id 36)
-            current (db/get-article (c/ensure-ds) id {})
-            current-version (:version current)
+            current-version (:version (db/get-article (c/ensure-ds) id {}))
             published? (when current-version (db/version-published? (c/ensure-ds) id current-version))
-            article {:article_id id :version current-version :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract :topics topics}
-            ;; The form against the last revision, read as db/update-article! reads it.
-            unchanged? (every? #(= (or (% article) "") (or (% current) ""))
-                               [:title :subtitle :content :footnotes :addenda :preamble])]
+            ;; :preview-image is what update-article! takes, :preview_image what the edit page shows.
+            article {:article_id id :version current-version :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :preview_image preview-image :abstract abstract :topics topics}]
         (cond
           (str/blank? title)
           (refuse "Title is required."
@@ -152,27 +149,24 @@
                                :error "Publish the current version before bumping to a new one."
                                :post-content post-content}))
 
-          (and save-version? published? unchanged?
-               (not (db/revised-since-announcement? (c/ensure-ds) id)))
-          (let [reason (str "Nothing changed since v" current-version " was announced")]
-            (refuse reason
-              #(views/edit-page {:article article :logged-in? true :version-published? published?
-                                 :error reason
-                                 :post-content post-content})))
-
           :else
-          (do
-            (db/update-article! (c/ensure-ds) id (merge article {:publish? publish?
-                                                                  :bump-version? save-version?
-                                                                  :post-content (when (and publish? (not skip-post?)) post-content)}))
+          (let [wrote? (db/update-article! (c/ensure-ds) id (merge article {:publish? publish?
+                                                                             :bump-version? save-version?
+                                                                             :post-content (when (and publish? (not skip-post?)) post-content)}))]
             (when (and publish? (not skip-post?))
               (future
                 (let [subscribers (db/list-email-subscribers (c/ensure-ds))
                       base (c/site-url req)]
                   (mail/send-article-notification! subscribers title subtitle post-content (str base "/article/" id)))))
-            (if no-redirect?
-              {:status 204}
-              (c/redirect (str "/article/" id)))))))))
+            (cond
+              no-redirect? {:status 204}
+              ;; "Save new version" that made no version: meta is saved, and says so.
+              (and save-version? (not wrote?))
+              (c/html-response 200
+                (views/edit-page {:article article :logged-in? true :version-published? published?
+                                  :notice (str "No new version: the text has not changed since v" current-version
+                                               " was announced. Abstract, categories and preview image are saved.")}))
+              :else (c/redirect (str "/article/" id)))))))))
 
 (defn confirm-delete-article-handler [req]
   (c/require-login req

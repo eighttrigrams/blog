@@ -272,13 +272,14 @@
     (t/create-and-publish! app token
       {"title" "Same" "content" "same content"} "Announcement")
     (Thread/sleep 1100)
-    (testing "refused, since nothing changed since v1 was announced"
+    (testing "told that no version was made, and why"
       (let [resp (t/POST app "/article/1"
                    (t/article-params {"title" "Same" "content" "same content"
                                       "save-version" "1"})
                    token)]
-        (is (= 400 (:status resp)))
-        (is (str/includes? (:body resp) "Nothing changed since v1 was announced"))))
+        (is (= 200 (:status resp)))
+        (is (str/includes? (:body resp) (str "No new version: the text has not changed since v1 was announced."
+                                             " Abstract, categories and preview image are saved.")))))
     (testing "no v2 created when content is unchanged"
       (is (= 404 (:status (t/GET app "/article/1/version/2")))))
     (testing "v1 still latest"
@@ -348,6 +349,59 @@
         token)
       (testing "the last draft revision becomes the first revision of v1"
         (is (= [(assoc (first before) :version 1)] (rows)))))))
+
+(deftest save-new-version-with-only-meta-changed-saves-it-without-a-version
+  (let [app (t/make-app)
+        token (t/login app)]
+    (t/create-and-publish! app token
+      {"title" "T" "content" "v1 as announced" "preview-image" "blog-images/1/cover.png"} "Announce v1")
+    (Thread/sleep 1100)
+    (let [resp (t/POST app "/article/1"
+                 (t/article-params {"title" "T" "content" "v1 as announced" "abstract" "new abstract"
+                                    "preview-image" "blog-images/1/cover.png" "save-version" "1"})
+                 token)]
+      (is (str/includes? (:body resp) "No new version: the text has not changed since v1 was announced."))
+      (testing "the page shows the preview image, so a Save from it does not blank it"
+        (is (= "blog-images/1/cover.png"
+               (get-in (t/select-one (t/parse resp) (hs/id "preview-image")) [:attrs :value])))))
+    (testing "the abstract is saved, and no version or revision is made"
+      (is (= "new abstract" (:abstract (db/get-article @server/ds 1 {}))))
+      (is (= [1 0] (map :version (db/get-article-versions @server/ds 1 {})))))))
+
+;; The two conditions that keep announced text in place.
+
+(deftest save-new-version-leaves-the-revision-publish-wrote-in-place
+  (let [app (t/make-app)
+        token (t/login app)
+        rows #(mapv (juxt :version :content) (db/get-article-versions @server/ds 1 {}))]
+    (t/POST app "/article" (t/article-params {"title" "T" "content" ""}) token)
+    (Thread/sleep 1100)
+    (t/POST app "/article/1" (t/article-params {"title" "T" "content" "v1 draft" "save-version" "1"}) token)
+    (Thread/sleep 1100)
+    ;; Publish with changes: the announced revision and its post share a second.
+    (t/POST app "/article/1"
+      (t/article-params {"title" "T" "content" "v1 as announced" "publish" "1" "post-content" "Announce v1"})
+      token)
+    (Thread/sleep 1100)
+    (t/POST app "/article/1" (t/article-params {"title" "T" "content" "v1 as announced" "save-version" "1"}) token)
+    (is (= [[1 "v1 as announced"] [1 "v1 draft"] [0 ""]] (rows)))))
+
+(deftest save-new-version-does-not-count-a-late-revision-of-an-earlier-version
+  (let [app (t/make-app)
+        token (t/login app)
+        rows #(mapv (juxt :version :content) (db/get-article-versions @server/ds 1 {}))]
+    (t/create-and-publish! app token {"title" "T" "content" "v1 as announced"} "Announce v1")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1" (t/article-params {"title" "T" "content" "v1 typo fix"}) token)
+    (Thread/sleep 1100)
+    (t/POST app "/article/1" (t/article-params {"title" "T" "content" "v2 text" "save-version" "1"}) token)
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "T" "content" "v2 text" "publish" "1" "post-content" "Announce v2"})
+      token)
+    (Thread/sleep 1100)
+    (t/POST app "/article/1" (t/article-params {"title" "T" "content" "v2 text" "save-version" "1"}) token)
+    (is (= [[2 "v2 text"] [1 "v1 typo fix"] [1 "v1 as announced"] [0 ""]] (rows)))))
 
 (deftest drafts-page-shows-preview-image
   (let [app (t/make-app)

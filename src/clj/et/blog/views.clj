@@ -700,11 +700,13 @@
       [:input {:type "password" :name "password" :id "password" :autofocus true}]]
      [:button.btn {:type "submit"} "Login"]]))
 
-(defn edit-page [{:keys [article logged-in? new? error post-content version-published?]}]
+(defn edit-page [{:keys [article logged-in? new? error notice post-content version-published?]}]
   (let [action (if new? "/article" (str "/article/" (:article_id article)))]
     (layout {:title (if new? "New Article" "Edit Article") :logged-in? logged-in?}
       (when error
         [:p.error error])
+      (when notice
+        [:p notice])
       [:form {:method "POST" :action action}
        [:div.edit-heading
         [:h1 (if new? "New Article" "Edit Article")]
