@@ -192,8 +192,9 @@
   Options: `:listing` a reply code to refuse every listing with; `:mlst` a reply
   code MLST answers with whatever is there (SIZE always tells the truth);
   `:store-fails?` leaves a three-byte stub and refuses, as a transfer that dies
-  part-way does."
-  [files {:keys [listing mlst store-fails? dirs] :or {dirs (atom #{})}}]
+  part-way does; `:stall`, an atom of a count, makes that many uploads' writes
+  block until their data stream is closed, as a server that stops reading does."
+  [files {:keys [listing mlst store-fails? dirs stall] :or {dirs (atom #{})}}]
   (let [code (atom 200)
         answer! (fn [c] (reset! code c))
         dir? (fn [d] (or (contains? @dirs d)
@@ -215,12 +216,28 @@
       (listFiles [dir] (in-dir dir))
       (sendCommand [cmd path]
         (answer! (if (and (= "MLST" cmd) mlst) mlst (if (contains? @files path) 250 550))))
-      (storeFile [path ^java.io.InputStream in]
-        (let [bytes (.readAllBytes in)]
-          (if-not (dir? (subs path 0 (str/last-index-of path "/")))
-            (do (answer! 553) false)
-            (do (swap! files assoc path (if store-fails? (byte-array 3) bytes))
-                (not store-fails?)))))
+      (storeFileStream [path]
+        (cond
+          (not (dir? (subs path 0 (str/last-index-of path "/"))))
+          (do (answer! 553) nil)
+
+          (and stall (pos? (first (swap-vals! stall #(max 0 (dec %))))))
+          (let [closed (promise)
+                block #(do @closed (throw (java.io.IOException. "Socket closed")))]
+            ;; A real SocketOutputStream, as storeFileStream answers, over a
+            ;; socket whose close is the only thing that ends the write.
+            (org.apache.commons.net.io.SocketOutputStream.
+              (proxy [java.net.Socket] []
+                (setSoLinger [_ _])
+                (close [] (deliver closed true)))
+              (proxy [java.io.OutputStream] []
+                (write ([_] (block)) ([_ _ _] (block))))))
+
+          :else
+          (let [buf (java.io.ByteArrayOutputStream.)]
+            (proxy [java.io.FilterOutputStream] [buf]
+              (close [] (swap! files assoc path (if store-fails? (byte-array 3) (.toByteArray buf))))))))
+      (completePendingCommand [] (answer! (if store-fails? 451 226)) (not store-fails?))
       (deleteFile [path] (swap! files dissoc path) true)
       (logout [] true)
       (disconnect [] nil))))
@@ -354,3 +371,29 @@
                                                (.getBytes "new") token)))))
         (is (contains? @dirs (str "/blog-images/" id)) "MKD for the article's own folder")
         (is (= "new" (text files (str "/blog-images/" id "/a.jpg"))))))))
+
+(deftest a-stalled-upload-is-cut-off-and-the-next-one-gets-the-lock
+  ;; A server that stops reading the data channel blocks a write for good: Java
+  ;; has no write timeout. The session's deadline closes it, and article-lock is
+  ;; free for the upload queued behind it. (session-ms is 90 s; 0.3 s here.)
+  (let [app (t/make-app)
+        token (t/login app)
+        id (create-article! app token)
+        files (atom {})
+        up! #(future (let [t (System/currentTimeMillis)
+                           r (POST-bytes app (str "/article/" id "/image?filename=" %)
+                                         (.getBytes "picture") token)]
+                       (assoc r :ms (- (System/currentTimeMillis) t))))]
+    (with-redefs-fn {#'images/session-ms 300}
+      #(with-fake-ftp files {:stall (atom 1)}
+         (fn []
+           (let [stalled (up! "a.jpg")
+                 _ (Thread/sleep 100)
+                 queued (up! "b.jpg")
+                 stalled @stalled
+                 queued @queued]
+             (is (= 502 (:status stalled)))
+             (is (str/includes? (:error (t/json-body stalled)) "cut off"))
+             (is (< (:ms stalled) 3000) "ended by the deadline, not by a hang")
+             (is (= 200 (:status queued)) "the next upload got the lock")
+             (is (= "picture" (text files (str "/blog-images/" id "/b.jpg"))))))))))

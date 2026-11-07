@@ -85,8 +85,9 @@ function prepare(file,k){
 }
 
 function upload(prepared){
-  /* Longer than the server's own FTP timeouts, so that a hung upload ends in a
-     line and the save guard lets go. A timed-out picture may still have
+  /* Longer than the 90-second deadline the server puts on its FTP session
+     (images.clj session-ms), so that a hung upload ends in a line and the save
+     guard lets go. Pictures queued behind one another can still pass it. A timed-out picture may still have
      arrived: an extra file, which the line says. */
   return fetch(url+'?filename='+encodeURIComponent(prepared.name),
                {method:'POST',body:prepared.blob,signal:AbortSignal.timeout(120000)})

@@ -19,9 +19,11 @@
   of that site. Everything reachable here is already served to anyone who asks
   for it. Blog production also already holds the mailbox password it sends with,
   which is the larger prize of the two."
-  (:require [clojure.string :as str]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [taoensso.telemere :as tel])
   (:import [org.apache.commons.net.ftp FTP FTPFile FTPSClient FTPReply]
+           [org.apache.commons.net.io SocketOutputStream]
            [java.io InputStream]
            [java.text Normalizer Normalizer$Form]
            [java.time LocalDateTime ZoneOffset]
@@ -119,12 +121,12 @@
           (cond-> "image" ext (str "." ext)))
       base)))
 
-(defn- open ^FTPSClient [{:keys [host username password]}]
-  (let [client (FTPSClient. false)]               ; false = explicit TLS (AUTH TLS)
+(defn- connect! [^FTPSClient client cfg]
+  (let [{:keys [host username password]} cfg]
     (.setControlEncoding client "UTF-8")
     (.setConnectTimeout client 15000)
-    ;; commons-net has no read timeout by default on the greeting, AUTH TLS and
-    ;; login, nor on the data channel (cookbook #409). Article uploads run under
+    ;; commons-net has no read timeout by default after the greeting (AUTH TLS,
+    ;; login), nor on the data channel (cookbook #409). Article uploads run under
     ;; a lock, so a server that goes silent would hold it until a restart.
     (.setDefaultTimeout client 30000)
     (.setDataTimeout client (java.time.Duration/ofSeconds 60))
@@ -158,6 +160,16 @@
       (reify org.apache.commons.net.ftp.FTPClient$HostnameResolver
         (resolve [_ _] (.getHostAddress (.getRemoteAddress client)))))
     client))
+
+(defn- open
+  "A connected, logged-in client, or an exception and no socket left open: a
+  timeout in AUTH TLS or login used to leave the socket to the GC (#412)."
+  ^FTPSClient [cfg]
+  (let [client (FTPSClient. false)]               ; false = explicit TLS (AUTH TLS)
+    (try (connect! client cfg)
+         (catch Exception e
+           (try (.disconnect client) (catch Exception _))
+           (throw e)))))
 
 (defn- ensure-dir!
   "Walk the prefix and create what is missing. MKD answers an error for a
@@ -198,6 +210,16 @@
   (let [code (.sendCommand client "MLST" path)]
     (= 550 (if (#{500 501 502 504} code) (.sendCommand client "SIZE" path) code))))
 
+(def ^:private session-ms
+  "How long one FTP session may take, all of it. Less than the browser waits."
+  90000)
+
+(defn- data-socket
+  "The socket under the stream storeFileStream answers with, which commons-net
+  keeps private."
+  ^java.net.Socket [^SocketOutputStream out]
+  (.get (doto (.getDeclaredField SocketOutputStream "socket") (.setAccessible true)) out))
+
 (defn- store!
   "Store `stream` as `filename` in `dir`. Returns the relative path, or throws.
   Returns nil, loudly, when no credential is configured.
@@ -211,7 +233,26 @@
     (tel/log! :error
       (str "FTP is not configured - refusing to upload " (pr-str filename) ". "
            "Set :ftp {:host .. :username .. :password ..} under :apps :blog."))
-    (let [client (open @*config)]
+    (let [start (System/currentTimeMillis)
+          client (open @*config)
+          data (atom nil)
+          cut (promise)
+          ;; A deadline on the whole session, inside the browser's two minutes.
+          ;; Each FTP timeout bounds one read and they add up (150 s measured,
+          ;; cookbook #412), and a STOR write has none at all - Java has no write
+          ;; timeout - so a server that stops reading would hold article-lock for
+          ;; ever. Closing the data socket and the control socket ends whatever
+          ;; is blocked on them.
+          deadline (future
+                     (Thread/sleep (max 0 (- (+ start session-ms) (System/currentTimeMillis))))
+                     (deliver cut true)
+                     ;; The data socket with SO_LINGER 0, not the stream: closing
+                     ;; a TLS socket waits for its write lock, which a blocked
+                     ;; write holds - unless SO_LINGER is set (JDK 21, measured).
+                     (when-let [out @data]
+                       (try (doto (data-socket out) (.setSoLinger true 0) (.close))
+                            (catch Exception _)))
+                     (.disconnect client))]
       (try
         (ensure-dir! client dir)
         (let [name (cond-> (safe-name filename)
@@ -222,7 +263,12 @@
             (throw (ex-info (str "the server would not confirm that " name
                                  " is free, so nothing was written")
                             {:path remote :reply (str/trim (or (.getReplyString client) ""))})))
-          (when-not (.storeFile client remote stream)
+          ;; storeFile, but through a stream the deadline can close.
+          (when-not (when-let [out (.storeFileStream client remote)]
+                      (reset! data out)
+                      (when (realized? cut) (.close out))   ; opened as the deadline fell
+                      (with-open [^java.io.OutputStream o out] (io/copy stream o :buffer-size 65536))
+                      (.completePendingCommand client))
             (let [reply (str/trim (or (.getReplyString client) "no reply"))]
               ;; A transfer that dies part-way leaves what did arrive on the server -
               ;; the first failure here left an 8192-byte stub, one buffer's worth,
@@ -237,9 +283,17 @@
               ;; nothing about which of the many ways it can refuse this was.
               (throw (ex-info (str "FTP refused the upload - " reply)
                               {:path remote :reply reply}))))
-          (str dir "/" name))
-        (finally
+          ;; QUIT only when all went well. After a failure the server may be
+          ;; what is stuck, and waiting for its goodbye costs another timeout.
           (try (.logout client) (catch Exception _))
+          (str dir "/" name))
+        (catch Exception e
+          (throw (if (realized? cut)
+                   (ex-info (str "the FTP session took longer than " (quot session-ms 1000)
+                                 " seconds and was cut off") {} e)
+                   e)))
+        (finally
+          (future-cancel deadline)
           (try (.disconnect client) (catch Exception _)))))))
 
 (defn upload!
