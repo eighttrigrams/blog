@@ -212,6 +212,48 @@
             (json-response 413 {:error (str "Too large. The limit is "
                                             (quot images/max-bytes (* 1024 1024)) " MB.")})))))))
 
+(defn upload-article-image-handler
+  "POST /article/:id/image — a picture dropped or pasted into an article's
+  content. The post upload's twin, with the same guards in the same order, into
+  blog-images/<article-id>/ and never over a picture already there. Here and not
+  in handler/articles.clj to sit beside what it copies."
+  [req]
+  (c/require-login req
+    (fn [req]
+      (let [filename (get-in req [:query-params "filename"])
+            article-id (try (Integer/parseInt (get-in req [:params :id]))
+                            (catch Exception _ nil))]
+        (cond
+          (nil? article-id)
+          (json-response 400 {:error "Not an article id."})
+
+          (nil? (db/get-article (c/ensure-ds) article-id {:include-deleted? true}))
+          (json-response 404 {:error "No such article."})
+
+          (str/blank? (str filename))
+          (json-response 400 {:error "No filename was sent."})
+
+          (not (images/allowed-extension? filename))
+          (json-response 415 {:error (str "Not an image this accepts: " filename)})
+
+          (not (images/configured?))
+          (json-response 503 {:error "Image upload is not configured on this server."})
+
+          :else
+          (if-let [bytes (read-capped (:body req) images/max-bytes)]
+            (if (zero? (alength bytes))
+              (json-response 400 {:error "The file was empty."})
+              (try
+                (with-open [in (java.io.ByteArrayInputStream. bytes)]
+                  (json-response 200 {:path (images/upload-to-article! in filename article-id)}))
+                (catch Exception e
+                  (tel/log! :error (str "Article image upload failed for "
+                                        (pr-str filename) ": " (.getMessage e)
+                                        (when-let [d (ex-data e)] (str " " (pr-str d)))))
+                  (json-response 502 {:error (str "Upload failed: " (.getMessage e))}))))
+            (json-response 413 {:error (str "Too large. The limit is "
+                                            (quot images/max-bytes (* 1024 1024)) " MB.")})))))))
+
 (defn list-post-images-handler
   "GET /post/:id/images — what is on the webspace for this post. Answers a list
   so the edit page can show files that exist but are not the post's image, which

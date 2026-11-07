@@ -1,10 +1,13 @@
 (ns et.blog.images-test
   "The upload's guards. Nothing here touches the network: the uploader is left
-  unconfigured, which is also one of the things under test."
+  unconfigured, which is also one of the things under test, or where a happy path
+  needs it, it talks to a fake FTP client that keeps its files in an atom."
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [clojure.string :as str]
+            [ring.mock.request :as mock]
             [et.blog.test-support :as t]
-            [et.blog.images :as images]))
+            [et.blog.images :as images])
+  (:import [org.apache.commons.net.ftp FTPFile FTPSClient]))
 
 (use-fixtures :each (fn [f] (images/configure! nil) (f) (images/configure! nil)))
 
@@ -115,3 +118,96 @@
       (let [resp (t/GET app "/post/1/images" token)]
         (is (= 200 (:status resp)))
         (is (str/includes? (:body resp) "\"unconfigured\":true"))))))
+
+;; --- an article's pictures, dropped or pasted into its content ----------
+
+(deftest an-articles-folder-is-a-constant-prefix-plus-its-id
+  ;; Where article pictures have always lived, and nothing a caller can steer.
+  (is (= "blog-images/41" (images/article-prefix 41)))
+  (doseq [bad ["41" "../evil" nil "41/../.." 7.5]]
+    (is (thrown? clojure.lang.ExceptionInfo (images/article-prefix bad))
+        (pr-str bad))))
+
+(deftest a-taken-name-gets-a-number
+  (is (= "a.jpg" (images/free-name "a.jpg" [])))
+  (is (= "a-2.jpg" (images/free-name "a.jpg" ["a.jpg"])))
+  (is (= "a-3.jpg" (images/free-name "a.jpg" ["a.jpg" "a-2.jpg" "b.jpg"])))
+  (is (= "image-2" (images/free-name "image" ["image"]))))
+
+(defn- create-article! [app token]
+  (->> (t/POST app "/article" (t/article-params {"title" "Pictures"}) token)
+       t/redirect-location
+       (re-find #"^/article/(\d+)")
+       second))
+
+(defn- POST-bytes [app path ^bytes bytes token]
+  (app (-> (mock/request :post path)
+           (mock/body bytes)
+           (mock/header "cookie" (str "token=" token)))))
+
+(deftest the-article-endpoint-is-owner-only
+  (let [app (t/make-app)
+        resp (t/POST app "/article/1/image?filename=a.png" {} nil)]
+    (is (contains? #{302 401 403} (:status resp))
+        "a visitor cannot write to the webspace")))
+
+(deftest the-article-endpoint-refuses-what-it-should-before-it-connects
+  (let [app (t/make-app)
+        token (t/login app)
+        id (create-article! app token)
+        at (fn [q] (:status (t/POST app (str "/article/" id "/image" q) {} token)))]
+    (testing "not an article id"
+      (is (= 400 (:status (t/POST app "/article/not-a-number/image?filename=a.png" {} token)))))
+    (testing "an article that does not exist"
+      (is (= 404 (:status (t/POST app "/article/99999/image?filename=a.png" {} token)))))
+    (testing "no filename"
+      (is (= 400 (at ""))))
+    (testing "not a picture, and no SVG"
+      (is (= 415 (at "?filename=notes.pdf")))
+      (is (= 415 (at "?filename=drawing.svg"))))
+    (testing "a picture, but nothing configured to upload with, as in development"
+      (let [resp (t/POST app (str "/article/" id "/image?filename=ok.png") {} token)]
+        (is (= 503 (:status resp)))
+        (is (= "Image upload is not configured on this server."
+               (:error (t/json-body resp))))))))
+
+(defn- fake-ftp
+  "An FTPS client that keeps its files in `files`, an atom of path -> bytes, and
+  never opens a socket."
+  [files]
+  (let [in-dir (fn [dir] (into-array FTPFile
+                                     (for [p (keys @files)
+                                           :when (str/starts-with? p (str dir "/"))]
+                                       (doto (FTPFile.) (.setName (subs p (inc (count dir))))))))]
+    (proxy [FTPSClient] []
+      (changeWorkingDirectory [_] true)
+      (makeDirectory [_] true)
+      (mlistDir [dir] (in-dir dir))
+      (listFiles [dir] (in-dir dir))
+      (storeFile [path ^java.io.InputStream in]
+        (swap! files assoc path (.readAllBytes in))
+        true)
+      (logout [] true)
+      (disconnect [] nil))))
+
+(deftest a-picture-goes-into-its-articles-folder-and-overwrites-nothing
+  (let [app (t/make-app)
+        token (t/login app)
+        id (create-article! app token)
+        files (atom {(str "/blog-images/" id "/cinching-corset.jpg") (.getBytes "the first")})
+        drop! (fn [content]
+                (POST-bytes app (str "/article/" id "/image?filename=Cinching%20Corset.jpg")
+                            (.getBytes ^String content) token))]
+    (images/configure! {:host "h" :username "u" :password "p"})
+    (with-redefs-fn {#'images/open (fn [_] (fake-ftp files))}
+      (fn []
+        (let [second-drop (drop! "the second")
+              third-drop (drop! "the third")]
+          (is (= 200 (:status second-drop)))
+          (is (= (str "blog-images/" id "/cinching-corset-2.jpg")
+                 (:path (t/json-body second-drop))))
+          (is (= (str "blog-images/" id "/cinching-corset-3.jpg")
+                 (:path (t/json-body third-drop))))
+          (is (= "the first"
+                 (String. ^bytes (get @files (str "/blog-images/" id "/cinching-corset.jpg"))))
+              "the picture that was there is untouched"))))))

@@ -60,6 +60,22 @@
     (throw (ex-info "post-id must be an integer" {:post-id post-id})))
   (str "blog-images/posts/" post-id))
 
+(defn article-prefix
+  "The one directory an article's pictures go to, blog-images/<article-id>,
+  where they have always lived. An integer only, for the reason post-prefix gives."
+  [article-id]
+  (when-not (integer? article-id)
+    (throw (ex-info "article-id must be an integer" {:article-id article-id})))
+  (str "blog-images/" article-id))
+
+(defn free-name
+  "`name`, or the first of name-2, name-3 ... that is not among `taken`."
+  [name taken]
+  (let [taken (set taken)
+        i (str/last-index-of name ".")
+        [base ext] (if i [(subs name 0 i) (subs name i)] [name ""])]
+    (first (remove taken (cons name (map #(str base "-" % ext) (iterate inc 2)))))))
+
 (defn extension [filename]
   (let [n (str/lower-case (or filename ""))
         i (str/last-index-of n ".")]
@@ -135,38 +151,65 @@
             ""
             segments)))
 
+(defn- taken-names
+  "The names already in `dir`, read the way list-post-files reads them."
+  [^FTPSClient client dir]
+  (map #(.getName ^FTPFile %)
+       (or (seq (.mlistDir client (str "/" dir)))
+           (seq (.listFiles client (str "/" dir))))))
+
+(defn- store!
+  "Store `stream` as `filename` in `dir`, or with `fresh?` under the first name
+  `dir` has not got yet (free-name), so that nothing there is overwritten.
+  Returns the relative path, or throws. Returns nil, loudly, when no credential
+  is configured."
+  [^InputStream stream filename dir fresh?]
+  (if-not (configured?)
+    (tel/log! :error
+      (str "FTP is not configured - refusing to upload " (pr-str filename) ". "
+           "Set :ftp {:host .. :username .. :password ..} under :apps :blog."))
+    (let [client (open @*config)]
+      (try
+        (ensure-dir! client dir)
+        (let [name (cond-> (safe-name filename)
+                     fresh? (free-name (taken-names client dir)))
+              remote (str "/" dir "/" name)]
+          (when-not (.storeFile client remote stream)
+            (let [reply (str/trim (or (.getReplyString client) "no reply"))]
+              ;; A transfer that dies part-way leaves what did arrive on the server -
+              ;; the first failure here left an 8192-byte stub, one buffer's worth,
+              ;; sitting where an image should be. Take it back out. This is the only
+              ;; delete in the namespace and it names the exact path just attempted,
+              ;; so it cannot become a way to remove anything else.
+              (try (.deleteFile client remote) (catch Exception _))
+              ;; The reply text goes in the message, not only in ex-data: the caller
+              ;; surfaces .getMessage, and "FTP refused the upload" on its own says
+              ;; nothing about which of the many ways it can refuse this was.
+              (throw (ex-info (str "FTP refused the upload - " reply)
+                              {:path remote :reply reply}))))
+          (str dir "/" name))
+        (finally
+          (try (.logout client) (catch Exception _))
+          (try (.disconnect client) (catch Exception _)))))))
+
 (defn upload!
   "Store `stream` as `filename` under the post's own image directory. Returns the
   relative path the post's image field wants - the same shape the existing rows
   carry - or throws. Returns nil, loudly, when no credential is configured."
   [^InputStream stream filename post-id]
-  (if-not (configured?)
-    (tel/log! :error
-      (str "FTP is not configured - refusing to upload " (pr-str filename) ". "
-           "Set :ftp {:host .. :username .. :password ..} under :apps :blog."))
-    (let [dir (post-prefix post-id)
-          name (safe-name filename)
-          remote (str "/" dir "/" name)
-          client (open @*config)]
-      (try
-        (ensure-dir! client dir)
-        (when-not (.storeFile client remote stream)
-          (let [reply (str/trim (or (.getReplyString client) "no reply"))]
-            ;; A transfer that dies part-way leaves what did arrive on the server -
-            ;; the first failure here left an 8192-byte stub, one buffer's worth,
-            ;; sitting where an image should be. Take it back out. This is the only
-            ;; delete in the namespace and it names the exact path just attempted,
-            ;; so it cannot become a way to remove anything else.
-            (try (.deleteFile client remote) (catch Exception _))
-            ;; The reply text goes in the message, not only in ex-data: the caller
-            ;; surfaces .getMessage, and "FTP refused the upload" on its own says
-            ;; nothing about which of the many ways it can refuse this was.
-            (throw (ex-info (str "FTP refused the upload - " reply)
-                            {:path remote :reply reply}))))
-        (str dir "/" name)
-        (finally
-          (try (.logout client) (catch Exception _))
-          (try (.disconnect client) (catch Exception _)))))))
+  (store! stream filename (post-prefix post-id) false))
+
+;; One article upload at a time: two pictures of one name dropped together would
+;; otherwise both find the name free, and the second would land on the first.
+(defonce ^:private article-lock (Object.))
+
+(defn upload-to-article!
+  "Store `stream` in the article's own folder as `filename`, or as filename-2,
+  -3 ... when that is taken: never over a picture already there. Returns the
+  relative path for the article's text, or throws, or nil as upload! does."
+  [^InputStream stream filename article-id]
+  (locking article-lock
+    (store! stream filename (article-prefix article-id) true)))
 
 (defn list-post-files
   "What is in a post's image directory: {:name :size :path} each, newest first.
