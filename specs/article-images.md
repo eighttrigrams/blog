@@ -59,10 +59,10 @@ Feature: Dropping or pasting a picture into the content
     And no existing file is overwritten
 
   Scenario: An odd name
-    When I drop "Ärger.jpg", "日本.jpg" or "a.php.jpg"
-    Then it is stored as "arger.jpg", "image.jpg" or "a-php.jpg":
-      accents dropped rather than the letter, always with its extension,
-      and with no dot but the last
+    When I drop "Ärger.jpg" or "日本.jpg"
+    Then it is stored as "arger.jpg" or "image.jpg":
+      accents dropped rather than the letter, always with its extension
+    And dots inside a name stay as they are ("v1.2.jpg" stays "v1.2.jpg")
     And when nothing of the name survives ("日本" becomes "image"),
       the server logs a warning naming the original
 
