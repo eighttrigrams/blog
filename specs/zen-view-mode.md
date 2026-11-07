@@ -70,8 +70,15 @@ Feature: Pictures in view mode
     When I drop a picture between two words of a rendered paragraph
     Then its placeholder goes into the markdown at exactly that point,
       found the same way a click finds the caret's place
-    And I stay in view mode, and see it upload there,
-      then the picture itself (or the ⚠ line)
+    And I stay in view mode, and see a small spinner there with
+      "Uploading Cinching Corset.jpg…", plain words, no markdown
+    And then the picture itself (or the ⚠ line)
+
+  Scenario: The placeholder in view mode
+    Given an upload is running
+    When view mode renders the text
+    Then "![Uploading Cinching Corset.jpg…]()" shows as the spinner and
+      "Uploading Cinching Corset.jpg…", never as brackets or a broken image
 
   Scenario: Pasting a picture in view mode
     Given I am in Zen's view mode
