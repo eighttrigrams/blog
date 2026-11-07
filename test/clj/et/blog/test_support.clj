@@ -102,7 +102,7 @@
   (let [create-resp (POST app "/article"
                       (article-params (assoc overrides "content" ""))
                       token)
-        article-id (str/replace (get-in create-resp [:headers "Location"]) "/article/" "")]
+        article-id (second (re-find #"^/article/(\d+)" (get-in create-resp [:headers "Location"])))]
     (Thread/sleep 1100)
     (POST app (str "/article/" article-id)
       (article-params (merge overrides {"save-version" "1"}))

@@ -24,7 +24,8 @@
                (t/article-params {"title" "Draft Article" "content" "Draft body"})
                token)]
     (is (= 302 (:status resp)))
-    (is (str/starts-with? (t/redirect-location resp) "/article/"))
+    (is (re-matches #"/article/\d+/edit" (t/redirect-location resp))
+        "it lands on its edit page, where the content field is")
     (testing "draft does NOT appear on public home page"
       (let [home (t/GET app "/articles")]
         (is (str/includes? (:body home) "No articles yet."))
@@ -69,7 +70,7 @@
         create-resp (t/POST app "/article"
                       (t/article-params {"title" "Original Title" "content" "Original content"})
                       token)
-        article-id (str/replace (t/redirect-location create-resp) "/article/" "")]
+        article-id (second (re-find #"^/article/(\d+)" (t/redirect-location create-resp)))]
     (Thread/sleep 1100)
     (t/POST app (str "/article/" article-id)
       (t/article-params {"title" "Updated Title" "content" "Updated content"})
@@ -592,6 +593,8 @@
             "a new article has no id, so an in-between save has nowhere to write")
         (is (nil? (t/select-one html (hs/id "zen-overlay"))))
         (is (not-any? #{"/js/zen.js"} scripts) "and so no Zen wiring either")
+        (is (nil? (t/select-one html (hs/id "content")))
+            "nor a content field: its pictures need the article's id")
         ;; The 270KB is paid here, unlike before: the fields on this page are
         ;; editors whether or not there is a Zen to open from them.
         (is (some #{"/vendor/codemirror/codemirror.js"} scripts) "the CodeMirror bundle")

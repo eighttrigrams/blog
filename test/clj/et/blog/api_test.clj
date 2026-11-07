@@ -100,7 +100,7 @@
         draft-resp (t/POST app "/article"
                      (t/article-params {"title" "Hidden Draft" "content" "Secret"})
                      token)
-        draft-id (str/replace (t/redirect-location draft-resp) "/article/" "")
+        draft-id (second (re-find #"^/article/(\d+)" (t/redirect-location draft-resp)))
         deleted-id (t/create-and-publish! app token
                      {"title" "Deleted Article" "content" "Gone"} "Announcement")]
     (t/POST app (str "/article/" deleted-id "/delete") {} token)

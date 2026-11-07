@@ -77,7 +77,7 @@
           (c/html-response 400
             (views/edit-page {:new? true :logged-in? true :article article}))
           (let [article-id (db/create-article! (c/ensure-ds) article)]
-            (c/redirect (str "/article/" article-id))))))))
+            (c/redirect (str "/article/" article-id "/edit"))))))))
 
 (defn edit-article-handler [req]
   (c/require-login req

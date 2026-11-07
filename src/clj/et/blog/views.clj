@@ -746,9 +746,12 @@
        [:div.form-group
         [:label {:for "topics"} "Categories"]
         [:input {:type "text" :name "topics" :id "topics" :value (or (:topics article) "")}]]
-       [:div.form-group
-        [:label {:for "content"} "Content"]
-        [:textarea {:name "content" :id "content" :data-editor "1"} (or (:content article) "")]]
+       ;; Not on a new article: pictures dropped into the content go to
+       ;; blog-images/<article-id>/, so the field waits for the id.
+       (when-not new?
+         [:div.form-group
+          [:label {:for "content"} "Content"]
+          [:textarea {:name "content" :id "content" :data-editor "1"} (or (:content article) "")]])
        [:div.form-group
         [:label {:for "footnotes"} "Footnotes"]
         [:textarea {:name "footnotes" :id "footnotes" :data-editor "1"} (or (:footnotes article) "")]]
