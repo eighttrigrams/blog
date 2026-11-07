@@ -95,14 +95,17 @@
 
 (defn safe-name
   "A filename reduced to something that cannot be a path. Accents go but not
-  their letters (Ärger becomes arger), everything else outside [a-z0-9.-]
+  their letters (Ärger becomes arger; Ł, Ø, Æ, ß and the like, which NFD does
+  not take apart, are spelled out first), everything else outside [a-z0-9.-]
   becomes a dash, runs collapse, and leading dots go - so `..`, a slash, and a
   dotfile all stop being expressible before the name is ever joined to a
   directory. When nothing of the name survives (日本.jpg) it is image.<ext>, and
   the original is logged as a warning, since that name is then lost."
   [filename]
   (let [given (str/replace (or filename "") #"^.*[/\\\\]" "") ; drop any path the client sent
-        base (-> (Normalizer/normalize given Normalizer$Form/NFD)
+        base (-> (str/escape given {\ł "l" \Ł "L" \ø "o" \Ø "O" \æ "ae" \Æ "AE" \ß "ss"
+                                    \œ "oe" \Œ "OE" \đ "d" \Đ "D"})
+                 (Normalizer/normalize Normalizer$Form/NFD)
                  (str/replace #"\p{M}" "")
                  str/lower-case
                  (str/replace #"[^a-z0-9.-]+" "-")
@@ -120,6 +123,11 @@
   (let [client (FTPSClient. false)]               ; false = explicit TLS (AUTH TLS)
     (.setControlEncoding client "UTF-8")
     (.setConnectTimeout client 15000)
+    ;; commons-net has no read timeout by default on the greeting, AUTH TLS and
+    ;; login, nor on the data channel (cookbook #409). Article uploads run under
+    ;; a lock, so a server that goes silent would hold it until a restart.
+    (.setDefaultTimeout client 30000)
+    (.setDataTimeout client (java.time.Duration/ofSeconds 60))
     (.connect client ^String host 21)
     (when-not (FTPReply/isPositiveCompletion (.getReplyCode client))
       (.disconnect client)

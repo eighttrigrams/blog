@@ -37,6 +37,7 @@
 (deftest a-name-keeps-what-it-can
   (is (= "arger.jpg" (images/safe-name "Ärger.jpg")) "the accent goes, not the letter")
   (is (= "v1.2.jpg" (images/safe-name "v1.2.jpg")) "dots inside a name stay")
+  (is (= "lodz-aero-ss.jpg" (images/safe-name "Łódź Ærø ß.jpg")) "letters NFD does not take apart are spelled out")
   (testing "when nothing survives it is image.<ext>, and the original is logged"
     (let [signal (tel/with-signal (is (= "image.jpg" (images/safe-name "日本.jpg"))))]
       (is (= :warn (:level signal)))
@@ -186,13 +187,17 @@
 (defn- fake-ftp
   "An FTPS client that keeps its files in `files`, an atom of path -> bytes, and
   never opens a socket. It answers with reply codes the way a server does.
+  A directory exists when a file is in it or it was made (MKD) into `:dirs`, an
+  atom of paths, and a file can only be stored into one that exists.
   Options: `:listing` a reply code to refuse every listing with; `:mlst` a reply
   code MLST answers with whatever is there (SIZE always tells the truth);
   `:store-fails?` leaves a three-byte stub and refuses, as a transfer that dies
   part-way does."
-  [files {:keys [listing mlst store-fails?]}]
+  [files {:keys [listing mlst store-fails? dirs] :or {dirs (atom #{})}}]
   (let [code (atom 200)
         answer! (fn [c] (reset! code c))
+        dir? (fn [d] (or (contains? @dirs d)
+                         (some #(str/starts-with? % (str d "/")) (keys @files))))
         in-dir (fn [dir]
                  (if listing
                    (do (answer! listing) (into-array FTPFile []))
@@ -204,16 +209,18 @@
     (proxy [FTPSClient] []
       (getReplyCode [] @code)
       (getReplyString [] (str @code " fake"))
-      (changeWorkingDirectory [_] true)
-      (makeDirectory [_] true)
+      (changeWorkingDirectory [d] (boolean (dir? d)))
+      (makeDirectory [d] (swap! dirs conj d) true)
       (mlistDir [dir] (in-dir dir))
       (listFiles [dir] (in-dir dir))
       (sendCommand [cmd path]
         (answer! (if (and (= "MLST" cmd) mlst) mlst (if (contains? @files path) 250 550))))
       (storeFile [path ^java.io.InputStream in]
         (let [bytes (.readAllBytes in)]
-          (swap! files assoc path (if store-fails? (byte-array 3) bytes))
-          (not store-fails?)))
+          (if-not (dir? (subs path 0 (str/last-index-of path "/")))
+            (do (answer! 553) false)
+            (do (swap! files assoc path (if store-fails? (byte-array 3) bytes))
+                (not store-fails?)))))
       (deleteFile [path] (swap! files dissoc path) true)
       (logout [] true)
       (disconnect [] nil))))
@@ -333,3 +340,17 @@
           (is (= "The file was empty." (:error (t/json-body empty-resp))))
           (is (= 413 (:status big-resp)))
           (is (empty? @files)))))))
+
+(deftest a-new-articles-folder-is-made-for-its-first-picture
+  (let [app (t/make-app)
+        token (t/login app)
+        id (create-article! app token)
+        files (atom {})
+        dirs (atom #{"/blog-images"})]
+    (with-fake-ftp files {:dirs dirs}
+      (fn []
+        (is (= (str "blog-images/" id "/a.jpg")
+               (:path (t/json-body (POST-bytes app (str "/article/" id "/image?filename=a.jpg")
+                                               (.getBytes "new") token)))))
+        (is (contains? @dirs (str "/blog-images/" id)) "MKD for the article's own folder")
+        (is (= "new" (text files (str "/blog-images/" id "/a.jpg"))))))))

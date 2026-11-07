@@ -85,8 +85,11 @@ function prepare(file,k){
 }
 
 function upload(prepared){
+  /* Longer than the server's own FTP timeouts, so that a hung upload ends in a
+     line and the save guard lets go. A timed-out picture may still have
+     arrived: an extra file, which the line says. */
   return fetch(url+'?filename='+encodeURIComponent(prepared.name),
-               {method:'POST',body:prepared.blob})
+               {method:'POST',body:prepared.blob,signal:AbortSignal.timeout(120000)})
     .then(function(r){
       /* A stale session is a redirect to /login, which fetch follows to a 200. */
       if(r.redirected)return {error:'Session expired. Reload and log in again.'};
@@ -96,6 +99,11 @@ function upload(prepared){
     .then(function(a){
       if(!a||a.error||!a.path)throw new Error((a&&a.error)||'Upload failed.');
       return a.path;
+    })
+    .catch(function(e){
+      if(e.name==='TimeoutError')throw new Error('no answer from the server within two '+
+        'minutes. It may have arrived all the same.');
+      throw e;
     });
 }
 
@@ -109,12 +117,14 @@ function placeholder(name){
   }
 }
 
-/* A picture stands on its own line. At `pos` (a drop) or over the selection. */
-function insert(view,text,pos){
+/* A picture stands on its own line. At `pos` (a drop) or over the selection,
+   and the caret after it unless `keep` says to leave the selection alone. */
+function insert(view,text,pos,keep){
   var doc=view.state.doc.toString(),sel=view.state.selection.main,
       from=pos==null?sel.from:pos,to=pos==null?sel.to:pos,
       ins=(from>0&&doc.charAt(from-1)!=='\n'?'\n':'')+text+(doc.charAt(to)!=='\n'?'\n':'');
-  view.dispatch({changes:{from:from,to:to,insert:ins},
+  view.dispatch(keep?{changes:{from:from,to:to,insert:ins}}:
+                {changes:{from:from,to:to,insert:ins},
                  selection:{anchor:from+ins.length},scrollIntoView:true});
 }
 
@@ -126,7 +136,9 @@ function insert(view,text,pos){
 function replace(ph,text){
   var shown=views.filter(function(v){return v.dom.getClientRects().length;}),
       live=shown[shown.length-1]||views[0];
-  if(live.state.doc.toString().indexOf(ph)<0)insert(live,text,null);
+  /* After the selection, or at the caret: never over what is selected, and the
+     selection stays as it is. */
+  if(live.state.doc.toString().indexOf(ph)<0)insert(live,text,live.state.selection.main.to,true);
   views.forEach(function(v){
     var i=v.state.doc.toString().indexOf(ph);
     if(i>=0)v.dispatch({changes:{from:i,to:i+ph.length,insert:text}});
