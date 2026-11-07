@@ -63,6 +63,21 @@ Feature: A click goes back into the text
     Given I edited something, pressed Escape, and clicked back in
     Then cmd+Z still undoes what I did before
 
+Feature: Pictures in view mode
+
+  Scenario: Dropping a picture onto the rendering
+    Given I am in Zen's view mode
+    When I drop a picture between two words of a rendered paragraph
+    Then its placeholder goes into the markdown at exactly that point,
+      found the same way a click finds the caret's place
+    And I stay in view mode, and see it upload there,
+      then the picture itself (or the ⚠ line)
+
+  Scenario: Pasting a picture in view mode
+    Given I am in Zen's view mode
+    When I paste a picture
+    Then it goes in where the caret last was in the text
+
 Feature: Saving and leaving
 
   Scenario: cmd+9 in either mode
@@ -89,5 +104,7 @@ Feature: Saving and leaving
   with the markers taken out. A citation's quoted text and a footnote's number
   are not in the source; a click there lands at the start of what produced
   them.
-- **Dropping pictures** (see [article-images.md](article-images.md)) works in
-  edit mode only.
+- **Pictures** (see [article-images.md](article-images.md)) work in both
+  modes. In view mode the drop point goes through the same text mapping as a
+  click, so a picture lands exactly where it was dropped. Everything else (the
+  upload, the placeholder, saving that waits) is the same as in edit mode.
