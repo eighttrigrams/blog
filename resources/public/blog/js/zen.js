@@ -83,7 +83,8 @@ function open(){
       caret=source?source.state.selection.main.head:(content.selectionStart||0);
   overlay.style.display='block';
   document.body.style.overflow='hidden';
-  if(!view){view=makeView(doc);bindKeys(view);}
+  if(!view){view=makeView(doc);bindKeys(view);
+    if(window.BlogArticleImages)window.BlogArticleImages.attach(view);}
   else{view.dispatch({changes:{from:0,to:view.state.doc.length,insert:doc}});}
   setCaret(caret);
   view.focus();
@@ -125,7 +126,10 @@ function mark(ok){while(flash.firstChild)flash.removeChild(flash.firstChild);
 /* FormData leaves out submit buttons that were not clicked, so publish and
    save-version stay out of an in-between save. Only 204 is success: a stale
    session answers with a redirect that fetch follows to a 200 login page. */
-function save(){var fd=new FormData(form);
+function save(){
+  /* A picture still on its way up would be saved as its placeholder for good. */
+  if(window.BlogArticleImages&&window.BlogArticleImages.refuseSave())return;
+  var fd=new FormData(form);
   fd.set('content',view?view.state.doc.toString():content.value);
   fd.set('no-redirect','1');
   /* Submitting a form normalizes textarea newlines to CRLF, FormData does not,

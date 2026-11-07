@@ -751,7 +751,10 @@
        (when-not new?
          [:div.form-group
           [:label {:for "content"} "Content"]
-          [:textarea {:name "content" :id "content" :data-editor "1"} (or (:content article) "")]])
+          ;; The only field that takes pictures (article-images.js).
+          [:textarea {:name "content" :id "content" :data-editor "1"
+                      :data-image-upload (str "/article/" (:article_id article) "/image")}
+           (or (:content article) "")]])
        [:div.form-group
         [:label {:for "footnotes"} "Footnotes"]
         [:textarea {:name "footnotes" :id "footnotes" :data-editor "1"} (or (:footnotes article) "")]]
@@ -790,7 +793,8 @@
       ;; id to write cmd+9 saves to, which a new article has not got yet.
       (editor-scripts)
       (when-not new?
-        [:script {:src "/js/zen.js"}]))))
+        (list [:script {:src "/js/article-images.js"}]
+              [:script {:src "/js/zen.js"}])))))
 
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}
