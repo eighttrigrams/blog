@@ -1,16 +1,18 @@
 (ns et.blog.images
   "Uploading a post's image straight onto the All-Inkl webspace, so writing a
-  post does not mean starting remote-files-organizer first.
+  post does not mean starting remote-files-organizer first. And a picture dropped
+  into an article's content, into the article's own folder.
 
   **Deliberately a fraction of what the organizer can do.** That panel browses,
   renames, deletes and backs up, and it is host-only on purpose - its secrets.clj
   says a tool holding write access to the webspace should not be reachable from
-  the internet. This runs in production, so it gets one verb and one place: store
-  a file under blog-images/posts/<post-id>/, and read back what is in that one
-  directory. There is no rename and no delete, nothing outside a post's own
-  folder, and no way to *name* a directory: the prefix is a constant and the only
-  variable is a post id, which the caller coerces to an integer before it gets
-  here - so a path cannot be smuggled through it.
+  the internet. This runs in production, so it gets one verb and two kinds of
+  place: store a file under blog-images/posts/<post-id>/ or, for an article,
+  blog-images/<article-id>/ (never over a file already there), and read back
+  what is in a post's directory. There is no rename and no delete, nothing outside
+  a post's or an article's own folder, and no way to *name* a directory: the
+  prefix is a constant and the only variable is an id, which the caller coerces
+  to an integer before it gets here - so a path cannot be smuggled through it.
 
   What is actually at stake is smaller than it first looks: the FTP login is
   jailed by the server to /daniel-de-oliveira.com/, which is the public web root
@@ -20,7 +22,10 @@
   (:require [clojure.string :as str]
             [taoensso.telemere :as tel])
   (:import [org.apache.commons.net.ftp FTP FTPFile FTPSClient FTPReply]
-           [java.io InputStream]))
+           [java.io InputStream]
+           [java.text Normalizer Normalizer$Form]
+           [java.time LocalDateTime ZoneOffset]
+           [java.time.format DateTimeFormatter]))
 
 (defonce ^:private *config (atom nil))
 
@@ -69,12 +74,16 @@
   (str "blog-images/" article-id))
 
 (defn free-name
-  "`name`, or the first of name-2, name-3 ... that is not among `taken`."
+  "`name`, or the first of name-2, name-3 ... that is not among `taken`. When
+  `taken` is nil - the folder could not be read - name-<UTC time stamp>, a name
+  that cannot exist yet, rather than a guess that the folder is empty."
   [name taken]
-  (let [taken (set taken)
-        i (str/last-index-of name ".")
+  (let [i (str/last-index-of name ".")
         [base ext] (if i [(subs name 0 i) (subs name i)] [name ""])]
-    (first (remove taken (cons name (map #(str base "-" % ext) (iterate inc 2)))))))
+    (if (nil? taken)
+      (str base "-" (.format (DateTimeFormatter/ofPattern "yyyyMMdd-HHmmss")
+                             (LocalDateTime/now ZoneOffset/UTC)) ext)
+      (first (remove (set taken) (cons name (map #(str base "-" % ext) (iterate inc 2))))))))
 
 (defn extension [filename]
   (let [n (str/lower-case (or filename ""))
@@ -85,18 +94,27 @@
   (contains? allowed-extensions (extension filename)))
 
 (defn safe-name
-  "A filename reduced to something that cannot be a path. Everything outside
-  [a-z0-9.-] becomes a dash, runs collapse, and leading dots go - so `..`, a
-  slash, and a dotfile all stop being expressible before the name is ever joined
-  to a directory."
+  "A filename reduced to something that cannot be a path. Accents go but not
+  their letters (Ärger becomes arger), everything else outside [a-z0-9.-]
+  becomes a dash, runs collapse, and leading dots go - so `..`, a slash, and a
+  dotfile all stop being expressible before the name is ever joined to a
+  directory. When nothing of the name survives (日本.jpg) it is image.<ext>, and
+  the original is logged as a warning, since that name is then lost."
   [filename]
-  (let [base (-> (or filename "image")
-                 (str/replace #"^.*[/\\\\]" "")          ; drop any path the client sent
+  (let [given (str/replace (or filename "") #"^.*[/\\\\]" "") ; drop any path the client sent
+        base (-> (Normalizer/normalize given Normalizer$Form/NFD)
+                 (str/replace #"\p{M}" "")
                  str/lower-case
                  (str/replace #"[^a-z0-9.-]+" "-")
                  (str/replace #"-{2,}" "-")
-                 (str/replace #"^[.-]+" ""))]
-    (if (str/blank? base) "image" base)))
+                 (str/replace #"^[.-]+" ""))
+        ext (re-matches #"[a-z0-9]+" (or (extension given) ""))]
+    (if (or (str/blank? base) (and ext (not (str/ends-with? base (str "." ext)))))
+      (do (when-not (str/blank? given)
+            (tel/log! :warn (str "Nothing of the file name " (pr-str given)
+                                 " survived - storing it as image" (when ext (str "." ext)))))
+          (cond-> "image" ext (str "." ext)))
+      base)))
 
 (defn- open ^FTPSClient [{:keys [host username password]}]
   (let [client (FTPSClient. false)]               ; false = explicit TLS (AUTH TLS)
@@ -152,17 +170,34 @@
             segments)))
 
 (defn- taken-names
-  "The names already in `dir`, read the way list-post-files reads them."
+  "The names in `dir`, or nil when the server would not list it in full. MLSD,
+  else LIST, and either counts only with a positive completion reply: a refused
+  or broken listing is not an empty folder."
   [^FTPSClient client dir]
-  (map #(.getName ^FTPFile %)
-       (or (seq (.mlistDir client (str "/" dir)))
-           (seq (.listFiles client (str "/" dir))))))
+  (let [listed (fn [files]
+                 (when (FTPReply/isPositiveCompletion (.getReplyCode client))
+                   (mapv #(.getName ^FTPFile %) files)))]
+    (try
+      (or (listed (.mlistDir client (str "/" dir)))
+          (listed (.listFiles client (str "/" dir))))
+      (catch Exception _ nil))))
+
+(defn- absent?
+  "Whether the server says, over the control channel, that nothing is at `path`:
+  MLST answering 550, or SIZE where MLST is not understood. Anything else - a
+  file being there, an answer this does not know - is not a yes."
+  [^FTPSClient client ^String path]
+  (let [code (.sendCommand client "MLST" path)]
+    (= 550 (if (#{500 501 502 504} code) (.sendCommand client "SIZE" path) code))))
 
 (defn- store!
-  "Store `stream` as `filename` in `dir`, or with `fresh?` under the first name
-  `dir` has not got yet (free-name), so that nothing there is overwritten.
-  Returns the relative path, or throws. Returns nil, loudly, when no credential
-  is configured."
+  "Store `stream` as `filename` in `dir`. Returns the relative path, or throws.
+  Returns nil, loudly, when no credential is configured.
+
+  With `fresh?` nothing in `dir` is ever overwritten: the name is one the folder
+  has not got (free-name), and it is written only once the server has said that
+  nothing is at that exact name. Without it (posts) the name is written to, as it
+  always was. An extra file is fine, a lost one is not."
   [^InputStream stream filename dir fresh?]
   (if-not (configured?)
     (tel/log! :error
@@ -173,15 +208,22 @@
         (ensure-dir! client dir)
         (let [name (cond-> (safe-name filename)
                      fresh? (free-name (taken-names client dir)))
-              remote (str "/" dir "/" name)]
+              remote (str "/" dir "/" name)
+              new? (absent? client remote)]
+          (when (and fresh? (not new?))
+            (throw (ex-info (str "the server would not confirm that " name
+                                 " is free, so nothing was written")
+                            {:path remote :reply (str/trim (or (.getReplyString client) ""))})))
           (when-not (.storeFile client remote stream)
             (let [reply (str/trim (or (.getReplyString client) "no reply"))]
               ;; A transfer that dies part-way leaves what did arrive on the server -
               ;; the first failure here left an 8192-byte stub, one buffer's worth,
-              ;; sitting where an image should be. Take it back out. This is the only
+              ;; sitting where an image should be. Take it back out, but only when
+              ;; the name was known to be new: otherwise what is there may be a
+              ;; picture that was there before, and it stays. This is the only
               ;; delete in the namespace and it names the exact path just attempted,
               ;; so it cannot become a way to remove anything else.
-              (try (.deleteFile client remote) (catch Exception _))
+              (when new? (try (.deleteFile client remote) (catch Exception _)))
               ;; The reply text goes in the message, not only in ex-data: the caller
               ;; surfaces .getMessage, and "FTP refused the upload" on its own says
               ;; nothing about which of the many ways it can refuse this was.

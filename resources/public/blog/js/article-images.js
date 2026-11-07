@@ -116,12 +116,17 @@ function insert(view,text,pos){
       ins=(from>0&&doc.charAt(from-1)!=='\n'?'\n':'')+text+(doc.charAt(to)!=='\n'?'\n':'');
   view.dispatch({changes:{from:from,to:to,insert:ins},
                  selection:{anchor:from+ins.length},scrollIntoView:true});
-  view.focus();
 }
 
 /* In every view that has it: Zen's and the page's editor hand the text back
-   and forth, so the one not on screen gets its copy right too. */
+   and forth, so the one not on screen gets its copy right too. When the one on
+   screen (Zen's while it is open, it is attached last) has lost the placeholder
+   - undone, typed into - the line goes in at its caret: never a picture on the
+   webspace that the text does not mention. */
 function replace(ph,text){
+  var shown=views.filter(function(v){return v.dom.getClientRects().length;}),
+      live=shown[shown.length-1]||views[0];
+  if(live.state.doc.toString().indexOf(ph)<0)insert(live,text,null);
   views.forEach(function(v){
     var i=v.state.doc.toString().indexOf(ph);
     if(i>=0)v.dispatch({changes:{from:i,to:i+ph.length,insert:text}});
@@ -141,6 +146,7 @@ function take(view,files,pos){
   });
   if(!lines.length)return;
   insert(view,lines.join('\n'),pos);
+  view.focus();
   jobs.forEach(function(j){
     prepare(j.file,j.kind).then(upload)
       .then(function(path){replace(j.ph,'!['+alt(j.file.name)+']('+path+')');},

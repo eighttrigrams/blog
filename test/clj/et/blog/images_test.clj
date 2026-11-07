@@ -6,7 +6,8 @@
             [clojure.string :as str]
             [ring.mock.request :as mock]
             [et.blog.test-support :as t]
-            [et.blog.images :as images])
+            [et.blog.images :as images]
+            [taoensso.telemere :as tel])
   (:import [org.apache.commons.net.ftp FTPFile FTPSClient]))
 
 (use-fixtures :each (fn [f] (images/configure! nil) (f) (images/configure! nil)))
@@ -32,6 +33,15 @@
   (is (= "image" (images/safe-name "")))
   (is (= "image" (images/safe-name "///")))
   (is (= "a-b.png" (images/safe-name "a  b.PNG")) "spaces collapse, case folds"))
+
+(deftest a-name-keeps-what-it-can
+  (is (= "arger.jpg" (images/safe-name "Ärger.jpg")) "the accent goes, not the letter")
+  (is (= "v1.2.jpg" (images/safe-name "v1.2.jpg")) "dots inside a name stay")
+  (testing "when nothing survives it is image.<ext>, and the original is logged"
+    (let [signal (tel/with-signal (is (= "image.jpg" (images/safe-name "日本.jpg"))))]
+      (is (= :warn (:level signal)))
+      (is (str/includes? (force (:msg_ signal)) "日本.jpg"))))
+  (is (nil? (tel/with-signal (images/safe-name "Ärger.jpg"))) "and nothing is logged when a name survives"))
 
 (deftest only-real-image-extensions-are-accepted
   (doseq [ok ["a.jpg" "a.jpeg" "a.png" "a.gif" "a.webp" "a.avif" "A.PNG"]]
@@ -132,7 +142,9 @@
   (is (= "a.jpg" (images/free-name "a.jpg" [])))
   (is (= "a-2.jpg" (images/free-name "a.jpg" ["a.jpg"])))
   (is (= "a-3.jpg" (images/free-name "a.jpg" ["a.jpg" "a-2.jpg" "b.jpg"])))
-  (is (= "image-2" (images/free-name "image" ["image"]))))
+  (is (= "image-2" (images/free-name "image" ["image"])))
+  (testing "a folder that could not be read: a name that cannot exist yet"
+    (is (re-matches #"a-\d{8}-\d{6}\.jpg" (images/free-name "a.jpg" nil)))))
 
 (defn- create-article! [app token]
   (->> (t/POST app "/article" (t/article-params {"title" "Pictures"}) token)
@@ -173,22 +185,44 @@
 
 (defn- fake-ftp
   "An FTPS client that keeps its files in `files`, an atom of path -> bytes, and
-  never opens a socket."
-  [files]
-  (let [in-dir (fn [dir] (into-array FTPFile
-                                     (for [p (keys @files)
-                                           :when (str/starts-with? p (str dir "/"))]
-                                       (doto (FTPFile.) (.setName (subs p (inc (count dir))))))))]
+  never opens a socket. It answers with reply codes the way a server does.
+  Options: `:listing` a reply code to refuse every listing with; `:mlst` a reply
+  code MLST answers with whatever is there (SIZE always tells the truth);
+  `:store-fails?` leaves a three-byte stub and refuses, as a transfer that dies
+  part-way does."
+  [files {:keys [listing mlst store-fails?]}]
+  (let [code (atom 200)
+        answer! (fn [c] (reset! code c))
+        in-dir (fn [dir]
+                 (if listing
+                   (do (answer! listing) (into-array FTPFile []))
+                   (do (answer! 226)
+                       (into-array FTPFile
+                                   (for [p (keys @files)
+                                         :when (str/starts-with? p (str dir "/"))]
+                                     (doto (FTPFile.) (.setName (subs p (inc (count dir))))))))))]
     (proxy [FTPSClient] []
+      (getReplyCode [] @code)
+      (getReplyString [] (str @code " fake"))
       (changeWorkingDirectory [_] true)
       (makeDirectory [_] true)
       (mlistDir [dir] (in-dir dir))
       (listFiles [dir] (in-dir dir))
+      (sendCommand [cmd path]
+        (answer! (if (and (= "MLST" cmd) mlst) mlst (if (contains? @files path) 250 550))))
       (storeFile [path ^java.io.InputStream in]
-        (swap! files assoc path (.readAllBytes in))
-        true)
+        (let [bytes (.readAllBytes in)]
+          (swap! files assoc path (if store-fails? (byte-array 3) bytes))
+          (not store-fails?)))
+      (deleteFile [path] (swap! files dissoc path) true)
       (logout [] true)
       (disconnect [] nil))))
+
+(defn- with-fake-ftp [files opts f]
+  (images/configure! {:host "h" :username "u" :password "p"})
+  (with-redefs-fn {#'images/open (fn [_] (fake-ftp files opts))} f))
+
+(defn- text [files path] (some-> (get @files path) (String.)))
 
 (deftest a-picture-goes-into-its-articles-folder-and-overwrites-nothing
   (let [app (t/make-app)
@@ -198,8 +232,7 @@
         drop! (fn [content]
                 (POST-bytes app (str "/article/" id "/image?filename=Cinching%20Corset.jpg")
                             (.getBytes ^String content) token))]
-    (images/configure! {:host "h" :username "u" :password "p"})
-    (with-redefs-fn {#'images/open (fn [_] (fake-ftp files))}
+    (with-fake-ftp files {}
       (fn []
         (let [second-drop (drop! "the second")
               third-drop (drop! "the third")]
@@ -208,6 +241,95 @@
                  (:path (t/json-body second-drop))))
           (is (= (str "blog-images/" id "/cinching-corset-3.jpg")
                  (:path (t/json-body third-drop))))
-          (is (= "the first"
-                 (String. ^bytes (get @files (str "/blog-images/" id "/cinching-corset.jpg"))))
+          (is (= "the first" (text files (str "/blog-images/" id "/cinching-corset.jpg")))
               "the picture that was there is untouched"))))))
+
+(deftest a-folder-that-cannot-be-read-is-not-taken-for-an-empty-one
+  ;; A refused listing used to read as "nothing there", and the upload went onto
+  ;; the existing picture. Now the name is one that cannot exist yet.
+  (let [app (t/make-app)
+        token (t/login app)
+        id (create-article! app token)
+        existing (str "/blog-images/" id "/cinching-corset.jpg")
+        files (atom {existing (.getBytes "the first")})]
+    (with-fake-ftp files {:listing 550}
+      (fn []
+        (let [resp (POST-bytes app (str "/article/" id "/image?filename=Cinching%20Corset.jpg")
+                               (.getBytes "the second") token)]
+          (is (= 200 (:status resp)))
+          (is (re-matches (re-pattern (str "blog-images/" id "/cinching-corset-\\d{8}-\\d{6}\\.jpg"))
+                          (:path (t/json-body resp))))
+          (is (= "the first" (text files existing))))))))
+
+(deftest nothing-is-written-unless-the-server-says-that-name-is-free
+  (let [app (t/make-app)
+        token (t/login app)
+        id (create-article! app token)
+        drop! #(POST-bytes app (str "/article/" id "/image?filename=a.jpg") (.getBytes "new") token)]
+    (testing "MLST says something is there, whatever the listing said: refused in words"
+      (let [files (atom {})]
+        (with-fake-ftp files {:mlst 250}
+          (fn []
+            (let [resp (drop!)]
+              (is (= 502 (:status resp)))
+              (is (str/includes? (:error (t/json-body resp)) "would not confirm"))
+              (is (empty? @files) "nothing was written"))))))
+    (testing "a server that does not know MLST is asked SIZE instead"
+      (let [files (atom {})]
+        (with-fake-ftp files {:mlst 502}
+          (fn []
+            (is (= 200 (:status (drop!))))
+            (is (= "new" (text files (str "/blog-images/" id "/a.jpg"))))))))))
+
+(deftest a-half-written-file-is-removed-only-when-its-name-was-new
+  (let [app (t/make-app)
+        token (t/login app)
+        article-id (create-article! app token)
+        post-id (-> (t/POST app "/posts" {"content" "Body" "footnotes" "" "image" ""} token)
+                    t/redirect-location
+                    (str/replace "/post/" ""))]
+    (testing "an article picture under a new name: the stub goes"
+      (let [files (atom {})]
+        (with-fake-ftp files {:store-fails? true}
+          (fn []
+            (is (= 502 (:status (POST-bytes app (str "/article/" article-id "/image?filename=a.jpg")
+                                            (.getBytes "new") token))))
+            (is (empty? @files))))))
+    (testing "a post picture written over an existing name: what is there stays"
+      (let [path (str "/blog-images/posts/" post-id "/a.jpg")
+            files (atom {path (.getBytes "the first")})]
+        (with-fake-ftp files {:store-fails? true}
+          (fn []
+            (is (= 502 (:status (POST-bytes app (str "/post/" post-id "/image?filename=a.jpg")
+                                            (.getBytes "new") token))))
+            (is (contains? @files path) "not deleted: it may be a picture that was there")))))))
+
+(deftest a-post-picture-still-lands-where-it-always-did
+  ;; Through the store! the article upload shares, and still over the same name.
+  (let [app (t/make-app)
+        token (t/login app)
+        post-id (-> (t/POST app "/posts" {"content" "Body" "footnotes" "" "image" ""} token)
+                    t/redirect-location
+                    (str/replace "/post/" ""))
+        files (atom {})
+        up! #(POST-bytes app (str "/post/" post-id "/image?filename=Pic.png") (.getBytes ^String %) token)]
+    (with-fake-ftp files {}
+      (fn []
+        (is (= (str "blog-images/posts/" post-id "/pic.png") (:path (t/json-body (up! "one")))))
+        (is (= (str "blog-images/posts/" post-id "/pic.png") (:path (t/json-body (up! "two")))))
+        (is (= "two" (text files (str "/blog-images/posts/" post-id "/pic.png"))))))))
+
+(deftest the-article-endpoint-refuses-an-empty-or-oversized-body
+  (let [app (t/make-app)
+        token (t/login app)
+        id (create-article! app token)
+        files (atom {})]
+    (with-fake-ftp files {}
+      (fn []
+        (let [empty-resp (POST-bytes app (str "/article/" id "/image?filename=a.jpg") (byte-array 0) token)
+              big-resp (POST-bytes app (str "/article/" id "/image?filename=a.jpg")
+                                   (byte-array (inc images/max-bytes)) token)]
+          (is (= 400 (:status empty-resp)))
+          (is (= "The file was empty." (:error (t/json-body empty-resp))))
+          (is (= 413 (:status big-resp)))
+          (is (empty? @files)))))))

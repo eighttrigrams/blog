@@ -159,26 +159,31 @@
           (> (+ (.size out) n) cap) nil
           :else (do (.write out buf 0 n) (recur)))))))
 
-(defn upload-post-image-handler [req]
+(defn- upload-image
+  "Both image uploads, a post's and an article's: the same guards in the same
+  order, then `(store stream filename id)`. `label` is \"post\" or \"article\",
+  for the messages, and `lookup` finds the thing by its id."
+  [req label lookup store]
   (c/require-login req
     (fn [req]
       ;; A string key for the query parameter: wrap-params keywordizes nothing,
       ;; and compojure only keywordizes the route params. :id is a keyword here,
       ;; "filename" is not.
       (let [filename (get-in req [:query-params "filename"])
-            ;; Parsed, not passed through. The post id is now part of the remote
+            ;; Parsed, not passed through. The id is part of the remote
             ;; directory, so a value straight off the URL would be a way to name
             ;; one - an integer cannot be.
-            post-id (try (Integer/parseInt (get-in req [:params :id]))
-                         (catch Exception _ nil))]
+            id (try (Integer/parseInt (get-in req [:params :id]))
+                    (catch Exception _ nil))]
         (cond
-          (nil? post-id)
-          (json-response 400 {:error "Not a post id."})
+          (nil? id)
+          (json-response 400 {:error (str "Not " (if (#{\a \e \i \o \u} (first label)) "an " "a ")
+                                          label " id.")})
 
-          ;; No point creating a directory for a post that does not exist, and
+          ;; No point creating a directory for something that does not exist, and
           ;; it keeps the webspace free of folders for ids nobody ever had.
-          (nil? (db/get-post (c/ensure-ds) post-id {:include-deleted? true}))
-          (json-response 404 {:error "No such post."})
+          (nil? (lookup id))
+          (json-response 404 {:error (str "No such " label ".")})
 
           (str/blank? (str filename))
           (json-response 400 {:error "No filename was sent."})
@@ -198,61 +203,31 @@
               (json-response 400 {:error "The file was empty."})
               (try
                 (with-open [in (java.io.ByteArrayInputStream. bytes)]
-                  (json-response 200 {:path (images/upload! in filename post-id)}))
+                  (json-response 200 {:path (store in filename id)}))
                 (catch Exception e
                   ;; Log it as well as answering with it. The first time this
                   ;; failed in production `fly logs` had nothing to say, because
                   ;; the only copy of the reason went to the browser - which is no
                   ;; use at all when the person who can read the screen and the
                   ;; person debugging are not in the same place.
-                  (tel/log! :error (str "Post image upload failed for "
+                  (tel/log! :error (str (str/capitalize label) " image upload failed for "
                                         (pr-str filename) ": " (.getMessage e)
                                         (when-let [d (ex-data e)] (str " " (pr-str d)))))
                   (json-response 502 {:error (str "Upload failed: " (.getMessage e))}))))
             (json-response 413 {:error (str "Too large. The limit is "
                                             (quot images/max-bytes (* 1024 1024)) " MB.")})))))))
+
+(defn upload-post-image-handler [req]
+  (upload-image req "post" #(db/get-post (c/ensure-ds) % {:include-deleted? true})
+                images/upload!))
 
 (defn upload-article-image-handler
   "POST /article/:id/image — a picture dropped or pasted into an article's
-  content. The post upload's twin, with the same guards in the same order, into
-  blog-images/<article-id>/ and never over a picture already there. Here and not
-  in handler/articles.clj to sit beside what it copies."
+  content, into blog-images/<article-id>/ and never over a picture already
+  there. Here and not in handler/articles.clj to share the post upload's guards."
   [req]
-  (c/require-login req
-    (fn [req]
-      (let [filename (get-in req [:query-params "filename"])
-            article-id (try (Integer/parseInt (get-in req [:params :id]))
-                            (catch Exception _ nil))]
-        (cond
-          (nil? article-id)
-          (json-response 400 {:error "Not an article id."})
-
-          (nil? (db/get-article (c/ensure-ds) article-id {:include-deleted? true}))
-          (json-response 404 {:error "No such article."})
-
-          (str/blank? (str filename))
-          (json-response 400 {:error "No filename was sent."})
-
-          (not (images/allowed-extension? filename))
-          (json-response 415 {:error (str "Not an image this accepts: " filename)})
-
-          (not (images/configured?))
-          (json-response 503 {:error "Image upload is not configured on this server."})
-
-          :else
-          (if-let [bytes (read-capped (:body req) images/max-bytes)]
-            (if (zero? (alength bytes))
-              (json-response 400 {:error "The file was empty."})
-              (try
-                (with-open [in (java.io.ByteArrayInputStream. bytes)]
-                  (json-response 200 {:path (images/upload-to-article! in filename article-id)}))
-                (catch Exception e
-                  (tel/log! :error (str "Article image upload failed for "
-                                        (pr-str filename) ": " (.getMessage e)
-                                        (when-let [d (ex-data e)] (str " " (pr-str d)))))
-                  (json-response 502 {:error (str "Upload failed: " (.getMessage e))}))))
-            (json-response 413 {:error (str "Too large. The limit is "
-                                            (quot images/max-bytes (* 1024 1024)) " MB.")})))))))
+  (upload-image req "article" #(db/get-article (c/ensure-ds) % {:include-deleted? true})
+                images/upload-to-article!))
 
 (defn list-post-images-handler
   "GET /post/:id/images — what is on the webspace for this post. Answers a list
