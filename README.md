@@ -1,8 +1,15 @@
 # blog
 
 Server-rendered blog: articles with versions, announcement posts, comments and
-replies. `make restart` starts the dev server on the port in `config.edn`,
-`make test` runs the tests.
+replies.
+
+## Running it
+
+`make restart` is the one way to run blog in development, whether it is running
+or not. It stops the JVM on the port in `config.edn` and starts a new one in the
+background with `DEV=true clojure -X:run`. It returns once the new one listens.
+The output goes to `logs/dev.log`. Log in at `/login` with the password `admin`,
+or with `ADMIN_PASSWORD` if that is set. `make test` runs the tests.
 
 ## API
 

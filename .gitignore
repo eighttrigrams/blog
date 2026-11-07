@@ -5,3 +5,4 @@ data/
 .backups/
 .env
 .claude/settings.local.json
+logs/

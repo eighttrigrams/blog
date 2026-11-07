@@ -1,19 +1,11 @@
 .PHONY: restart deploy backup backup-replay test
 
-# The dev server listens on config.edn's port, 3130 (the workspace README's port
-# table is the authority). This kills the old server by what it is, not by that
-# port.
-#
-# The brackets are not decoration. `pkill -f` matches against whole command
-# lines, and this recipe is itself a command line containing the pattern — so a
-# plain 'et.blog.server' matches the shell running the recipe and can kill it
-# before it ever starts the server. That is not hypothetical: it is what
-# handoffs/blog-scoping-report.md hit with plurama's own `make stop`, and pkill
-# excludes only itself, not its parent. '[e]t.blog.server' as a *regex* does not
-# match the literal text '[e]t.blog.server' in this line, but does match
-# 'et.blog.server' in the JVM's arguments. Verified both ways with pgrep.
+# The one way to run blog in development, whether it is running or not. It stops
+# the server on config.edn's port, 3130 (the workspace README's port table is the
+# authority), starts a new one with DEV=true, and returns once it listens. Its
+# output goes to logs/dev.log. The how and why are in scripts/restart.sh.
 restart:
-	@pkill -f '[e]t.blog.server' 2>/dev/null; sleep 1 && DEV=true clj -M -m et.blog.server &
+	@./scripts/restart.sh
 
 test:
 	clojure -M:test
