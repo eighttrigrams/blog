@@ -117,9 +117,13 @@
                        (c/text-response 400 reason)
                        (c/html-response 400 (page-fn))))
             skip-post? (= id 36)
-            current-version (:version (db/get-article (c/ensure-ds) id {}))
+            current (db/get-article (c/ensure-ds) id {})
+            current-version (:version current)
             published? (when current-version (db/version-published? (c/ensure-ds) id current-version))
-            article {:article_id id :version current-version :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract :topics topics}]
+            article {:article_id id :version current-version :title title :subtitle subtitle :content content :footnotes footnotes :addenda addenda :preamble preamble :preview-image preview-image :abstract abstract :topics topics}
+            ;; The form against the last revision, read as db/update-article! reads it.
+            unchanged? (every? #(= (or (% article) "") (or (% current) ""))
+                               [:title :subtitle :content :footnotes :addenda :preamble])]
         (cond
           (str/blank? title)
           (refuse "Title is required."
@@ -147,6 +151,14 @@
             #(views/edit-page {:article article :logged-in? true :version-published? published?
                                :error "Publish the current version before bumping to a new one."
                                :post-content post-content}))
+
+          (and save-version? published? unchanged?
+               (not (db/revised-since-announcement? (c/ensure-ds) id)))
+          (let [reason (str "Nothing changed since v" current-version " was announced")]
+            (refuse reason
+              #(views/edit-page {:article article :logged-in? true :version-published? published?
+                                 :error reason
+                                 :post-content post-content})))
 
           :else
           (do

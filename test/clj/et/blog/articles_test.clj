@@ -3,6 +3,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [hickory.select :as hs]
+            [et.blog.db :as db]
+            [et.blog.server :as server]
             [et.blog.test-support :as t]))
 
 (deftest home-page-starts-empty
@@ -270,16 +272,82 @@
     (t/create-and-publish! app token
       {"title" "Same" "content" "same content"} "Announcement")
     (Thread/sleep 1100)
-    (t/POST app "/article/1"
-      (t/article-params {"title" "Same" "content" "same content"
-                         "save-version" "1"})
-      token)
+    (testing "refused, since nothing changed since v1 was announced"
+      (let [resp (t/POST app "/article/1"
+                   (t/article-params {"title" "Same" "content" "same content"
+                                      "save-version" "1"})
+                   token)]
+        (is (= 400 (:status resp)))
+        (is (str/includes? (:body resp) "Nothing changed since v1 was announced"))))
     (testing "no v2 created when content is unchanged"
       (is (= 404 (:status (t/GET app "/article/1/version/2")))))
     (testing "v1 still latest"
       (let [resp (t/GET app "/article/1")]
         (is (str/includes? (:body resp) "v1"))
         (is (not (str/includes? (:body resp) "v2")))))))
+
+;; specs/versions-and-revisions.md: "Save new version" with nothing new in the
+;; form moves the last revision on, by its version field alone.
+
+(deftest save-new-version-moves-the-last-revision-made-after-the-announcement
+  (let [app (t/make-app)
+        token (t/login app)
+        rows #(db/get-article-versions @server/ds 1 {})]
+    (t/create-and-publish! app token
+      {"title" "T" "content" "v1 as announced"} "Announce v1")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1" (t/article-params {"title" "T" "content" "typo fix"}) token)
+    (Thread/sleep 1100)
+    (t/POST app "/article/1"
+      (t/article-params {"title" "T" "content" "zen edit" "no-redirect" "1"})
+      token)
+    (let [before (rows)]
+      (Thread/sleep 1100)
+      (let [resp (t/POST app "/article/1"
+                   (t/article-params {"title" "T" "content" "zen edit" "save-version" "1"})
+                   token)]
+        (is (= "/article/1" (t/redirect-location resp))))
+      (testing "the last revision moves from v1 to v2"
+        (is (str/includes? (:body (t/GET app "/article/1/version/2")) "zen edit")))
+      (testing "v1 ends with the revision before it"
+        (let [body (:body (t/GET app "/article/1/version/1"))]
+          (is (str/includes? body "typo fix"))
+          (is (not (str/includes? body "zen edit")))))
+      (testing "the moved row keeps its created_at and text, and no row is added"
+        (is (= (count before) (count (rows))))
+        (is (= (assoc (first before) :version 2) (first (rows))))
+        (is (= (rest before) (rest (rows))))))))
+
+(deftest save-new-version-with-unsaved-changes-adds-a-row
+  (let [app (t/make-app)
+        token (t/login app)
+        rows #(db/get-article-versions @server/ds 1 {})]
+    (t/create-and-publish! app token
+      {"title" "T" "content" "v1 as announced"} "Announce v1")
+    (Thread/sleep 1100)
+    (t/POST app "/article/1" (t/article-params {"title" "T" "content" "typo fix"}) token)
+    (let [before (rows)]
+      (Thread/sleep 1100)
+      (t/POST app "/article/1"
+        (t/article-params {"title" "T" "content" "v2 content" "save-version" "1"})
+        token)
+      (testing "all v1 revisions stay in v1"
+        (is (= before (rest (rows)))))
+      (testing "the changes become the first revision of v2"
+        (is (= [2 "v2 content"] ((juxt :version :content) (first (rows)))))))))
+
+(deftest save-new-version-on-an-unchanged-draft-moves-it-to-v1
+  (let [app (t/make-app)
+        token (t/login app)
+        rows #(db/get-article-versions @server/ds 1 {})]
+    (t/POST app "/article" (t/article-params {"title" "Draft" "content" "draft text"}) token)
+    (let [before (rows)]
+      (Thread/sleep 1100)
+      (t/POST app "/article/1"
+        (t/article-params {"title" "Draft" "content" "draft text" "save-version" "1"})
+        token)
+      (testing "the last draft revision becomes the first revision of v1"
+        (is (= [(assoc (first before) :version 1)] (rows)))))))
 
 (deftest drafts-page-shows-preview-image
   (let [app (t/make-app)
