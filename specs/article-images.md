@@ -80,7 +80,8 @@ Feature: Dropping or pasting a picture into the content
   Scenario: The placeholder is gone when the upload ends
     Given I undid the paste, or typed inside the placeholder
     When the upload ends
-    Then its link (or its ⚠ line) goes in at the caret instead
+    Then its link (or its ⚠ line) goes in at the caret instead,
+      after the selection if there is one, replacing nothing
 
   Scenario: Dev has no upload
     Given the server has no FTP credentials, as in development
