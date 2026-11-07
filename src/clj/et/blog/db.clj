@@ -112,7 +112,10 @@
                                :footnotes (or footnotes "")
                                :addenda (or addenda "")
                                :preamble (or preamble "")
-                               :version version}]})
+                               ;; A plain save joins whatever version is newest when it lands.
+                               :version (if (or bump? publish?) version
+                                          {:select [:version] :from [:articles] :where [:= :article_id article-id]
+                                           :order-by [[:created_at :desc]] :limit 1})}]})
         jdbc-opts))
     (let [meta-updates (cond-> {}
                         preview-image (assoc :preview_image preview-image)

@@ -404,6 +404,44 @@
     (t/POST app "/article/1" (t/article-params {"title" "T" "content" "v2 text" "save-version" "1"}) token)
     (is (= [[2 "v2 text"] [1 "v1 typo fix"] [1 "v1 as announced"] [0 ""]] (rows)))))
 
+;; A Zen save and "Save new version" racing each other. The race is injected
+;; where update-article! reads the current version (cookbook #406).
+
+(defn- racing-save-setup [app token]
+  (t/create-and-publish! app token {"title" "T" "content" "v1 as announced"} "Announce v1")
+  (Thread/sleep 1100)
+  (t/POST app "/article/1" (t/article-params {"title" "T" "content" "zen edit"}) token)
+  (Thread/sleep 1100))
+
+(deftest save-new-version-moves-nothing-when-a-save-lands-after-it-read-the-last-revision
+  (let [app (t/make-app)
+        token (t/login app)
+        rows #(mapv (juxt :version :content) (db/get-article-versions @server/ds 1 {}))
+        real @#'db/current-version
+        armed (atom true)]
+    (racing-save-setup app token)
+    (with-redefs [db/current-version (fn [ds id]
+                                       (when (compare-and-set! armed true false)
+                                         (db/update-article! ds id {:title "T" :content "zen edit 2"}))
+                                       (real ds id))]
+      (t/POST app "/article/1" (t/article-params {"title" "T" "content" "zen edit" "save-version" "1"}) token))
+    (is (= [[1 "zen edit 2"] [1 "zen edit"] [1 "v1 as announced"] [0 ""]] (rows)))))
+
+(deftest a-save-that-lands-after-the-move-joins-the-moved-version
+  (let [app (t/make-app)
+        token (t/login app)
+        rows #(mapv (juxt :version :content) (db/get-article-versions @server/ds 1 {}))
+        real @#'db/current-version
+        armed (atom true)]
+    (racing-save-setup app token)
+    (with-redefs [db/current-version (fn [ds id]
+                                       (let [v (real ds id)]
+                                         (when (compare-and-set! armed true false)
+                                           (db/update-article! ds id {:title "T" :content "zen edit" :bump-version? true}))
+                                         v))]
+      (t/POST app "/article/1" (t/article-params {"title" "T" "content" "zen edit 2" "no-redirect" "1"}) token))
+    (is (= [[2 "zen edit 2"] [2 "zen edit"] [1 "v1 as announced"] [0 ""]] (rows)))))
+
 (deftest drafts-page-shows-preview-image
   (let [app (t/make-app)
         token (t/login app)]
