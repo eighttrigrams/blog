@@ -59,9 +59,12 @@ Feature: Dropping or pasting a picture into the content
     And no existing file is overwritten
 
   Scenario: An odd name
-    When I drop "日本.jpg" or "a.php.jpg"
-    Then it is stored as "image.jpg" or "a-php.jpg":
-      always with its extension, and with no dot but the last
+    When I drop "Ärger.jpg", "日本.jpg" or "a.php.jpg"
+    Then it is stored as "arger.jpg", "image.jpg" or "a-php.jpg":
+      accents dropped rather than the letter, always with its extension,
+      and with no dot but the last
+    And when nothing of the name survives ("日本" becomes "image"),
+      the server logs a warning naming the original
 
   Scenario: Not a picture
     When I drop "notes.pdf" or "drawing.svg"
