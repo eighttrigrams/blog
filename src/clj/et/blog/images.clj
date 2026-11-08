@@ -214,6 +214,15 @@
   "How long one FTP session may take, all of it. Less than the browser waits."
   90000)
 
+(defn- cut-off
+  "`e`, which ended a session the deadline cut, said as such - with its own
+  message and data still in it, since that is the reason the log needs."
+  [^Exception e]
+  (ex-info (str "the FTP session took longer than " (quot session-ms 1000)
+                " seconds and was cut off - " (or (.getMessage e) (.getName (class e))))
+           (merge (ex-data e) {:deadline-ms session-ms})
+           e))
+
 (defn- data-socket
   "The socket under the stream storeFileStream answers with, which commons-net
   keeps private."
@@ -236,7 +245,10 @@
     (let [start (System/currentTimeMillis)
           client (open @*config)
           data (atom nil)
-          cut (promise)
+          ;; :running until the deadline cuts the session (:cut) or a failure
+          ;; claims it first (:failed) - so a failure is called a cut only
+          ;; when the deadline really fired.
+          state (atom :running)
           ;; A deadline on the whole session, inside the browser's two minutes.
           ;; Each FTP timeout bounds one read and they add up (150 s measured,
           ;; cookbook #412), and a STOR write has none at all - Java has no write
@@ -245,14 +257,14 @@
           ;; is blocked on them.
           deadline (future
                      (Thread/sleep (max 0 (- (+ start session-ms) (System/currentTimeMillis))))
-                     (deliver cut true)
-                     ;; The data socket with SO_LINGER 0, not the stream: closing
-                     ;; a TLS socket waits for its write lock, which a blocked
-                     ;; write holds - unless SO_LINGER is set (JDK 21, measured).
-                     (when-let [out @data]
-                       (try (doto (data-socket out) (.setSoLinger true 0) (.close))
-                            (catch Exception _)))
-                     (.disconnect client))]
+                     (when (compare-and-set! state :running :cut)
+                       ;; The data socket with SO_LINGER 0, not the stream: closing
+                       ;; a TLS socket waits for its write lock, which a blocked
+                       ;; write holds - unless SO_LINGER is set (JDK 21, measured).
+                       (when-let [out @data]
+                         (try (doto (data-socket out) (.setSoLinger true 0) (.close))
+                              (catch Exception _)))
+                       (.disconnect client)))]
       (try
         (ensure-dir! client dir)
         (let [name (cond-> (safe-name filename)
@@ -266,7 +278,7 @@
           ;; storeFile, but through a stream the deadline can close.
           (when-not (when-let [out (.storeFileStream client remote)]
                       (reset! data out)
-                      (when (realized? cut) (.close out))   ; opened as the deadline fell
+                      (when (= :cut @state) (.close out))   ; opened as the deadline fell
                       (with-open [^java.io.OutputStream o out] (io/copy stream o :buffer-size 65536))
                       (.completePendingCommand client))
             (let [reply (str/trim (or (.getReplyString client) "no reply"))]
@@ -288,10 +300,7 @@
           (try (.logout client) (catch Exception _))
           (str dir "/" name))
         (catch Exception e
-          (throw (if (realized? cut)
-                   (ex-info (str "the FTP session took longer than " (quot session-ms 1000)
-                                 " seconds and was cut off") {} e)
-                   e)))
+          (throw (if (compare-and-set! state :running :failed) e (cut-off e))))
         (finally
           (future-cancel deadline)
           (try (.disconnect client) (catch Exception _)))))))

@@ -316,8 +316,11 @@
       (let [files (atom {})]
         (with-fake-ftp files {:store-fails? true}
           (fn []
-            (is (= 502 (:status (POST-bytes app (str "/article/" article-id "/image?filename=a.jpg")
-                                            (.getBytes "new") token))))
+            (let [resp (POST-bytes app (str "/article/" article-id "/image?filename=a.jpg")
+                                   (.getBytes "new") token)]
+              (is (= 502 (:status resp)))
+              (is (= "Upload failed: FTP refused the upload - 451 fake" (:error (t/json-body resp)))
+                  "its own reason, not called a cut: the deadline never fired"))
             (is (empty? @files))))))
     (testing "a post picture written over an existing name: what is there stays"
       (let [path (str "/blog-images/posts/" post-id "/a.jpg")
@@ -393,7 +396,18 @@
                  stalled @stalled
                  queued @queued]
              (is (= 502 (:status stalled)))
-             (is (str/includes? (:error (t/json-body stalled)) "cut off"))
+             (is (str/includes? (:error (t/json-body stalled)) "cut off - Socket closed")
+                 "the cut, and what it broke")
              (is (< (:ms stalled) 3000) "ended by the deadline, not by a hang")
              (is (= 200 (:status queued)) "the next upload got the lock")
              (is (= "picture" (text files (str "/blog-images/" id "/b.jpg"))))))))))
+
+(deftest a-cut-keeps-the-real-reason-for-the-log
+  ;; The handler logs .getMessage and ex-data. "cut off {}" said nothing about
+  ;; what the deadline broke.
+  (let [e (#'images/cut-off (ex-info "FTP refused the upload - 426 aborted"
+                                     {:path "/blog-images/41/a.jpg" :reply "426 aborted"}))]
+    (is (str/includes? (.getMessage e) "cut off - FTP refused the upload - 426 aborted"))
+    (is (= {:path "/blog-images/41/a.jpg" :reply "426 aborted" :deadline-ms 90000} (ex-data e))))
+  (is (str/includes? (.getMessage (#'images/cut-off (java.net.SocketTimeoutException. "Read timed out")))
+                     "cut off - Read timed out")))
