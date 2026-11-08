@@ -582,7 +582,7 @@
             button (t/select-one html (hs/id "zen-open"))
             overlay (t/select-one html (hs/id "zen-overlay"))
             mount (t/select-one html (hs/id "zen-content"))
-            scripts (map #(get-in % [:attrs :src]) (t/select-all html (hs/tag :script)))]
+            scripts (map #(some-> (get-in % [:attrs :src]) (str/replace #"\?v=.*$" "")) (t/select-all html (hs/tag :script)))]
         (is (= 200 (:status resp)))
         (is (str/includes? (:body (t/GET app "/article/drafts" token)) "Zen")
             "the article under test is a draft, so Zen is not gated on publication")
@@ -625,7 +625,7 @@
     (testing "a new article has the editors but no Zen"
       (let [resp (t/GET app "/article/new" token)
             html (t/parse resp)
-            scripts (map #(get-in % [:attrs :src]) (t/select-all html (hs/tag :script)))]
+            scripts (map #(some-> (get-in % [:attrs :src]) (str/replace #"\?v=.*$" "")) (t/select-all html (hs/tag :script)))]
         (is (= 200 (:status resp)))
         (is (nil? (t/select-one html (hs/id "zen-open")))
             "a new article has no id, so an in-between save has nowhere to write")

@@ -62,6 +62,16 @@
     ;; rest of the API instead of falling through to the HTML 404 page.
     (route/not-found {:status 404 :body {:error "Not found"}})))
 
+(defn- wrap-versioned
+  "A script or stylesheet asked for as views/asset links it, with ?v=<content
+  hash>, never changes under that URL: a browser may keep it for a year."
+  [handler]
+  (fn [req]
+    (let [resp (handler req)]
+      (if (and resp (get-in req [:query-params "v"]))
+        (assoc-in resp [:headers "Cache-Control"] "public, max-age=31536000, immutable")
+        resp))))
+
 (defroutes app-routes
   (wrap-json-response api-routes)
   (GET "/" [] (fn [req] (articles-h/article-handler (assoc-in req [:params :id] "36"))))
@@ -121,7 +131,7 @@
   (POST "/email/message" [] email-h/message-submit-handler)
   (GET "/feed/posts.xml" [] feed-h/feed-posts-handler)
   (GET "/feed/articles.xml" [] feed-h/feed-articles-handler)
-  (route/resources "/" {:root "public/blog"})
+  (wrap-versioned (route/resources "/" {:root "public/blog"}))
   (route/not-found (fn [_] (c/html-response 404 (views/not-found-page {:logged-in? false})))))
 
 (defn- app [prod?]

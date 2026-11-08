@@ -1,9 +1,34 @@
 (ns et.blog.views
   (:require [clojure.string :as str]
+            [clojure.java.io :as io]
             [hiccup2.core :as h]
             [hiccup.util :as hu]
             [et.blog.render :as render]
-            [et.blog.util :refer [human-date human-datetime]]))
+            [et.blog.util :refer [human-date human-datetime]])
+  (:import [java.security MessageDigest]))
+
+;; Cache busting. A script or stylesheet of blog's own is linked with a short
+;; hash of its content, /js/zen.js?v=3f9c0a1b2e, so the link changes exactly when
+;; the file does and a browser never runs yesterday's file with today's page
+;; (it did: /js is served with Last-Modified only, which browsers cache on a
+;; guess). The file is read off the classpath, where route/resources serves it
+;; from, and hashed once per modification: a stat per link in dev, where the
+;; files change under a running server, and nothing that changes in a jar.
+(def ^:private content-hash
+  (memoize
+    (fn [url _modified]
+      (with-open [in (io/input-stream url)]
+        (let [md (MessageDigest/getInstance "SHA-256")
+              buf (byte-array 8192)]
+          (loop [] (let [n (.read in buf)] (when (pos? n) (.update md buf 0 n) (recur))))
+          (subs (format "%064x" (BigInteger. 1 (.digest md))) 0 10))))))
+
+(defn asset [path]
+  (if-let [url (io/resource (str "public/blog" path))]
+    (str path "?v=" (content-hash (str url) (if (= "file" (.getProtocol url))
+                                              (.lastModified (io/as-file url))
+                                              0)))
+    path))
 
 (defn layout [{:keys [title logged-in?]} & body]
   (str
@@ -20,9 +45,9 @@
       [:link {:rel "preconnect" :href "https://fonts.googleapis.com"}]
       [:link {:rel "preconnect" :href "https://fonts.gstatic.com" :crossorigin ""}]
       [:link {:rel "stylesheet" :href "https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400;1,600&display=swap"}]
-      [:link {:rel "stylesheet" :href "/vendor/hljs/github.min.css"}]
-      [:script {:src "/vendor/hljs/highlight.min.js"}]
-      [:script {:src "/vendor/hljs/clojure.min.js"}]
+      [:link {:rel "stylesheet" :href (asset "/vendor/hljs/github.min.css")}]
+      [:script {:src (asset "/vendor/hljs/highlight.min.js")}]
+      [:script {:src (asset "/vendor/hljs/clojure.min.js")}]
       [:script "hljs.highlightAll();"]
       [:style
        "*, *::before, *::after { box-sizing: border-box; }
@@ -176,8 +201,8 @@
         #zen-overlay.viewing #zen-view { display: block; }
         #zen-overlay.viewing #zen-content { visibility: hidden; }
         .zen-ring { animation: zen-ring 0.9s ease-out; border-radius: 4px; }
-        @keyframes zen-ring { from { box-shadow: 0 0 0 0 rgba(253,83,83,0.55); background-color: rgba(253,83,83,0.12); } to { box-shadow: 0 0 0 14px rgba(253,83,83,0); background-color: transparent; } }
-        .zen-pop { position: absolute; width: 3px; margin-left: -1px; border-radius: 2px; background: #FD5353; pointer-events: none; animation: zen-pop 0.7s ease-out forwards; }
+        @keyframes zen-ring { from { box-shadow: 0 0 0 0 rgba(201,162,39,0.55); background-color: rgba(201,162,39,0.12); } to { box-shadow: 0 0 0 14px rgba(201,162,39,0); background-color: transparent; } }
+        .zen-pop { position: absolute; width: 3px; margin-left: -1px; border-radius: 2px; background: #C9A227; pointer-events: none; animation: zen-pop 0.7s ease-out forwards; }
         @keyframes zen-pop { 0% { transform: scale(1); opacity: 1; } 30% { transform: scale(2.4, 1.5); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
         .zen-uploading { color: rgba(0,0,0,0.5); }
         .zen-uploading i { display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.45em; vertical-align: -0.05em; border: 2px solid rgba(0,0,0,0.15); border-top-color: #FD5353; border-radius: 50%; animation: zen-spin 0.8s linear infinite; }
@@ -231,8 +256,8 @@
 ;; accident. A page that wants it says so, in both places.
 (defn- editor-scripts []
   (list
-    [:script {:src "/vendor/codemirror/codemirror.js"}]
-    [:script {:src "/js/editors.js"}]))
+    [:script {:src (asset "/vendor/codemirror/codemirror.js")}]
+    [:script {:src (asset "/js/editors.js")}]))
 
 (defn home-page [{:keys [articles logged-in? topic]}]
   (layout {:title nil :logged-in? logged-in?}
@@ -396,7 +421,7 @@
        [:p "The Notes box is empty."])]
     [:div#save-flash]
     (editor-scripts)
-    [:script {:src "/js/notes.js"}]))
+    [:script {:src (asset "/js/notes.js")}]))
 
 ;; Reachable by URL only, now that the box edits a Note where it stands: it is
 ;; the one save path that needs no JavaScript, and the fallback if the inline
@@ -811,8 +836,8 @@
       ;; id to write cmd+9 saves to, which a new article has not got yet.
       (editor-scripts)
       (when-not new?
-        (list [:script {:src "/js/article-images.js"}]
-              [:script {:src "/js/zen.js"}])))))
+        (list [:script {:src (asset "/js/article-images.js")}]
+              [:script {:src (asset "/js/zen.js")}])))))
 
 (defn posts-page [{:keys [posts logged-in?]}]
   (layout {:title "Posts" :logged-in? logged-in?}
@@ -932,8 +957,8 @@
       ;; Posts only. Articles keep their images under blog-images/<article-id>/
       ;; and are not what this was asked for.
       (when-not new?
-        (list [:script {:src "/js/image-upload.js"}]
-              [:script {:src "/js/post-files.js"}])))))
+        (list [:script {:src (asset "/js/image-upload.js")}]
+              [:script {:src (asset "/js/post-files.js")}])))))
 
 (defn confirm-delete-article-page [{:keys [article logged-in?]}]
   (layout {:title "Delete Article" :logged-in? logged-in?}
@@ -1139,4 +1164,4 @@
        "other tables: those rows are gone."]
       (events-section events))
 
-    [:script {:src "/js/dashboard.js"}]))
+    [:script {:src (asset "/js/dashboard.js")}]))
