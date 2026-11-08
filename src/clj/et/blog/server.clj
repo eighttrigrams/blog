@@ -91,6 +91,7 @@
   (GET "/article/:id/delete" [] articles-h/confirm-delete-article-handler)
   (POST "/article/:id/delete" [] articles-h/delete-article-handler)
   (POST "/article/:id/image" [] posts-h/upload-article-image-handler)
+  (POST "/article/:id/render" [] articles-h/render-article-handler)
   (POST "/article/:id" [] articles-h/update-article-handler)
   (GET "/posts" [] posts-h/posts-handler)
   (GET "/post/deleted" [] posts-h/deleted-posts-handler)

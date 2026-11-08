@@ -12,15 +12,53 @@
 (def ^:private md-parser (.build (Parser/builder md-options)))
 (def ^:private md-renderer (.build (HtmlRenderer/builder md-options)))
 
+;; The same renderer, and every block, emphasis, link and image says which
+;; characters of the text it came from: data-pos="start-end". Only for Zen's view
+;; mode, which puts a click on the rendering back into the text (zen.js). The
+;; attribute comes after href and src, so the rewrites below still find them.
+(def ^:private md-renderer-with-positions
+  (.build (HtmlRenderer/builder (doto (MutableDataSet. md-options)
+                                  (.set HtmlRenderer/SOURCE_POSITION_ATTRIBUTE "data-pos")))))
+
 (defn- externalize-links [html]
   (str/replace html #"<a href=\"(https?://[^\"]+)\""
     (fn [[_ url]]
       (str "<a href=\"" url "\" target=\"_blank\" rel=\"noopener\""))))
 
-(defn markdown->html [text]
+(defn- render-markdown [^HtmlRenderer renderer text]
   (when (and text (not (str/blank? text)))
     (let [doc (.parse md-parser text)]
-      (externalize-links (.render md-renderer doc)))))
+      (externalize-links (.render renderer doc)))))
+
+(defn markdown->html [text]
+  (render-markdown md-renderer text))
+
+(defn- replace-mapped
+  "str/replace with a function, and also a function that takes an offset in the
+  result back to the offset in `text` it came from. An offset inside a
+  replacement goes back to where what it replaced began: a citation's quoted
+  words are not in the text, and a click on them lands on the CITE: that made them."
+  [text pattern f]
+  (let [m (re-matcher pattern text)
+        sb (StringBuilder.)]
+    (loop [from 0 edits []]
+      (if (.find m)
+        (let [start (.start m)
+              at (.length (.append sb (subs text from start)))
+              end (.length (.append sb ^String (f (re-groups m))))]
+          (recur (.end m) (conj edits [at end start (.end m)])))
+        [(str (.append sb (subs text from)))
+         (fn [p]
+           (if-let [[at end start stop] (last (take-while #(<= (first %) p) edits))]
+             (if (< p end) start (+ stop (- p end)))
+             p))]))))
+
+(defn- positions->text
+  "data-pos counts in the text flexmark was given. Count it in the text as written."
+  [html back]
+  (str/replace html #" data-pos=\"(\d+)-(\d+)\""
+    (fn [[_ start end]]
+      (str " data-pos=\"" (back (parse-long start)) "-" (back (parse-long end)) "\""))))
 
 (def ^:private footnote-ref-pattern #"FOOTNOTE:([a-zA-Z0-9_-]+)")
 (def ^:private cite-pattern #"CITE:(\d+):(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}):(\d+):(\d+)")
@@ -50,7 +88,7 @@
         (str "<sup class=\"missing\">[MISSING: " id "]</sup>")))))
 
 (defn- resolve-citations [content fetch-fn]
-  (str/replace content cite-pattern
+  (replace-mapped content cite-pattern
     (fn [[_ article-id-str as-of start-str end-str]]
       (try
         (let [article-id (Integer/parseInt article-id-str)
@@ -144,21 +182,28 @@
       [content nil])))
 
 (defn- strip-divider [content]
-  (str/replace content divider-pattern ""))
+  (replace-mapped content divider-pattern (constantly "")))
 
-(defn render-content [{:keys [content footnotes]} fetch-fn]
-  (let [content (strip-divider (or content ""))
+(defn render-content
+  "The article page's rendering. With :positions?, Zen's view mode's: the same,
+  and with data-pos on the blocks, counted in `content` as it was handed in."
+  ([post fetch-fn] (render-content post fetch-fn {}))
+  ([{:keys [content footnotes]} fetch-fn {:keys [positions?]}]
+  (let [[content back] (strip-divider (or content ""))
         ref-ids (find-footnote-refs content)
         ref-order (into {} (map-indexed (fn [i id] [id i]) ref-ids))
         def-map (or (parse-footnote-defs footnotes) {})
-        processed (resolve-citations content fetch-fn)
-        html (or (markdown->html processed) "")
+        [processed back-cited] (resolve-citations content fetch-fn)
+        html (if positions?
+               (positions->text (or (render-markdown md-renderer-with-positions processed) "")
+                                (comp back back-cited))
+               (or (markdown->html processed) ""))
         html (replace-footnote-refs html ref-order def-map)
         html (resolve-image-paths html)
         html (embed-video html)
         html (embed-youtube html)
         footnotes-html (render-footnotes-html ref-ids def-map)]
-    (str html (or footnotes-html ""))))
+    (str html (or footnotes-html "")))))
 
 (defn render-content-preview [{:keys [content] :as post} fetch-fn]
   (let [[above below] (split-at-divider (or content ""))]

@@ -168,6 +168,21 @@
                                                " was announced. Abstract, categories and preview image are saved.")}))
               :else (c/redirect (str "/article/" id)))))))))
 
+(defn render-article-handler
+  "POST /article/:id/render — Zen's view mode. The text in the editor, saved or
+  not, rendered the way the article page renders it (footnotes from the form's
+  footnotes field, citations resolved, blog-images/ through the base URL), with
+  data-pos on the blocks so that a click can find its way back into the text.
+  The owner's alone: a citation reads any article, a draft too."
+  [req]
+  (c/require-login req
+    (fn [req]
+      (let [fetch-fn (fn [aid as-of] (db/get-article-version (c/ensure-ds) aid as-of {}))]
+        (c/html-response 200
+          (render/render-content {:content (get-in req [:form-params "content"])
+                                  :footnotes (get-in req [:form-params "footnotes"])}
+                                 fetch-fn {:positions? true}))))))
+
 (defn confirm-delete-article-handler [req]
   (c/require-login req
     (fn [req]
