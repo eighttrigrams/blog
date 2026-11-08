@@ -167,6 +167,21 @@
         #zen-content .cm-editor { height: 100%; }
         #zen-close { position: fixed; top: 0.25rem; left: 0.75rem; z-index: 91; padding: 0; background: none; border: none; font-family: inherit; font-size: 2.75rem; line-height: 1; color: rgba(0,0,0,0.25); cursor: pointer; }
         #zen-close:hover { color: #FD5353; }
+        /* Zen's view mode (zen.js): the rendering lies over the editor, which
+           stays mounted underneath, out of sight, with its caret and its undo. */
+        #zen-column { position: relative; }
+        #zen-view { display: none; position: absolute; top: 3.5rem; right: 1.5rem; bottom: 1.5rem; left: 1.5rem; margin: 0; overflow: auto; }
+        #zen-view:focus { outline: none; }
+        #zen-view > :first-child { margin-top: 0; }
+        #zen-overlay.viewing #zen-view { display: block; }
+        #zen-overlay.viewing #zen-content { visibility: hidden; }
+        .zen-ring { animation: zen-ring 0.9s ease-out; border-radius: 4px; }
+        @keyframes zen-ring { from { box-shadow: 0 0 0 0 rgba(253,83,83,0.55); background-color: rgba(253,83,83,0.12); } to { box-shadow: 0 0 0 14px rgba(253,83,83,0); background-color: transparent; } }
+        .zen-pop { position: absolute; width: 3px; margin-left: -1px; border-radius: 2px; background: #FD5353; pointer-events: none; animation: zen-pop 0.7s ease-out forwards; }
+        @keyframes zen-pop { 0% { transform: scale(1); opacity: 1; } 30% { transform: scale(2.4, 1.5); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+        .zen-uploading { color: rgba(0,0,0,0.5); }
+        .zen-uploading i { display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.45em; vertical-align: -0.05em; border: 2px solid rgba(0,0,0,0.15); border-top-color: #FD5353; border-radius: 50%; animation: zen-spin 0.8s linear infinite; }
+        @keyframes zen-spin { to { transform: rotate(360deg); } }
         /* The save mark, after tracker's #save-flash / .save-flash-mark. 10000
            carries it above the overlay. */
         #save-flash { position: fixed; top: 10px; left: 0; right: 0; display: flex; justify-content: center; z-index: 10000; pointer-events: none; }
@@ -779,7 +794,10 @@
            [:div#zen-column
             ;; The CodeMirror mount. A div, so there is nothing here that could
             ;; be serialized even if it were inside the form.
-            [:div#zen-content]]]
+            [:div#zen-content]
+            ;; View mode's rendering (zen.js), drawn over the editor. Focusable,
+            ;; so the keys and a pasted picture come here while it is shown.
+            [:div#zen-view.article-content {:tabindex "-1"}]]]
           [:div#save-flash]))
       [:div.symbol-palette
        [:button {:type "button" :data-symbol "\u201C" :title "Opening double quote"} "\u201C"]

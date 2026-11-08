@@ -146,7 +146,7 @@ function replace(ph,text){
   });
 }
 
-function take(view,files,pos){
+function take(view,files,pos,away){
   var lines=[],jobs=[];
   files.forEach(function(f){
     var k=kind(f);
@@ -159,7 +159,7 @@ function take(view,files,pos){
   });
   if(!lines.length)return;
   insert(view,lines.join('\n'),pos);
-  view.focus();
+  if(!away)view.focus();
   jobs.forEach(function(j){
     prepare(j.file,j.kind).then(upload)
       .then(function(path){replace(j.ph,'!['+alt(j.file.name)+']('+path+')');},
@@ -191,15 +191,19 @@ function draggingFiles(e){
 /* On the editor's outer element in the capture phase, ahead of CodeMirror's own
    handlers on its content: CodeMirror reads a dropped file as text and inserts
    it, which for a picture is a screenful of binary. So every file drop is taken
-   from it, pictures or not; a text paste goes through as ever. */
-function attach(view){
-  views.push(view);
-  var el=view.dom;
+   from it, pictures or not; a text paste goes through as ever.
+
+   Or on another element that stands for the editor's text: Zen's view mode,
+   whose rendering takes pictures into the text underneath it. at(e) says where
+   in the text a drop or a paste goes (null: over the selection), and the focus
+   stays on that element, the editor being out of sight. */
+function listen(view,el,at){
+  var away=el!==view.dom;
   el.addEventListener('paste',function(e){
     var files=pastedPictures(e);
     if(!files)return;
     e.preventDefault();e.stopPropagation();
-    take(view,files,null);
+    take(view,files,at(e),away);
   },true);
   el.addEventListener('dragover',function(e){
     if(!draggingFiles(e))return;
@@ -209,9 +213,15 @@ function attach(view){
   el.addEventListener('drop',function(e){
     if(!draggingFiles(e))return;
     e.preventDefault();e.stopPropagation();
-    take(view,Array.prototype.slice.call(e.dataTransfer.files),
-         view.posAtCoords({x:e.clientX,y:e.clientY}));
+    take(view,Array.prototype.slice.call(e.dataTransfer.files),at(e),away);
   },true);
+}
+
+function attach(view){
+  views.push(view);
+  listen(view,view.dom,function(e){
+    return e.type==='drop'?view.posAtCoords({x:e.clientX,y:e.clientY}):null;
+  });
 }
 
 /* ---- saving waits ----------------------------------------------------- */
@@ -234,7 +244,7 @@ function refuseSave(){
 
 content.form.addEventListener('submit',function(e){if(refuseSave())e.preventDefault();});
 
-window.BlogArticleImages={attach:attach,refuseSave:refuseSave};
+window.BlogArticleImages={attach:attach,listen:listen,refuseSave:refuseSave};
 var inline=window.BlogEditors&&window.BlogEditors.get('content');
 if(inline)attach(inline);
 })();
