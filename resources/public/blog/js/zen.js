@@ -95,10 +95,17 @@ function open(){
       /* A drop on the rendering lands where a click there would; a paste where
          the caret last was in the text. */
       window.BlogArticleImages.listen(view,sheet,function(e){
-        var at=e.type==='drop'?pointAt(e.clientX,e.clientY):null;
+        var at=e.type==='drop'&&!drawing?pointAt(e.clientX,e.clientY):null;
         return at==null?view.state.selection.main.head:at;
       });
-    }}
+    }
+    /* A double-click on the rendering: its first click lands in the text, and
+       its second would hit the editor that has just appeared there and select a
+       word, which the next key replaces. Just after landing it is one click. */
+    view.dom.addEventListener('mousedown',function(e){
+      if(e.detail>1&&Date.now()-landed<500){e.preventDefault();e.stopPropagation();}
+    },true);
+  }
   else{view.dispatch({changes:{from:0,to:view.state.doc.length,insert:doc}});}
   setCaret(caret);
   view.focus();
@@ -138,7 +145,10 @@ function close(){
 
 var viewing=false,
     shown='',   /* the text the sheet was drawn from: its data-pos count in it */
-    drawn=0;    /* the last draw asked for; an older answer arriving late is dropped */
+    drawn=0,    /* the last draw asked for; an older answer arriving late is dropped */
+    drawing=false, /* one is on its way: until it lands the sheet's data-pos may
+                      count in a text that has changed since, so a click waits */
+    landed=0;   /* when a click last went into the text */
 
 function footnotes(){
   var f=window.BlogEditors?window.BlogEditors.get('footnotes'):null;
@@ -150,6 +160,7 @@ function footnotes(){
    citations quoted, pictures from the webspace. Nothing is saved. */
 function draw(then){
   var n=++drawn,text=view.state.doc.toString();
+  drawing=true;
   fetch(form.action+'/render',{method:'POST',
         body:new URLSearchParams({content:text,footnotes:footnotes()})})
     .then(function(r){
@@ -160,6 +171,7 @@ function draw(then){
     })
     .then(function(html){
       if(n!==drawn)return;
+      drawing=false;
       sheet.innerHTML=html;
       shown=text;
       uploading();
@@ -167,6 +179,7 @@ function draw(then){
     })
     .catch(function(e){
       if(n!==drawn)return;
+      drawing=false;
       sheet.textContent='⚠ '+e.message;
       shown='';
     });
@@ -249,12 +262,19 @@ function pop(){
 function toEdit(at){
   viewing=false;
   overlay.classList.remove('viewing');
+  var head=at==null?view.state.selection.main.head:Math.min(at,view.state.doc.length);
   if(at!=null){
-    at=Math.min(at,view.state.doc.length);
-    view.dispatch({selection:{anchor:at},
-                   effects:window.CM6.EditorView.scrollIntoView(at,{y:'center'})});
+    view.dispatch({selection:{anchor:head},
+                   effects:window.CM6.EditorView.scrollIntoView(head,{y:'center'})});
   }
+  /* The browser's caret too. CodeMirror writes it only when its selection
+     changes, and the rendering took it: back at the very place you left, or with
+     nothing to point at, focus() read the stale one back and the typing went to
+     the start of the text. */
+  var d=view.domAtPos(head);
+  window.getSelection().collapse(d.node,d.offset);
   view.focus();
+  landed=Date.now();
   pop();
 }
 
@@ -302,6 +322,10 @@ function column(src,rendered,offset){
    FOOTNOTE: that made it, and a point on it lands there. */
 function locate(el,node,offset){
   var r=range(el),seg={from:r[0],to:r[1],text:''},hit=null;
+  /* A list item counts from its marker, and "1. 1984" would match the year's 1
+     to the marker's. */
+  if(el.tagName==='LI')
+    seg.from+=(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]*/.exec(shown.slice(r[0],r[1]))||[''])[0].length;
   (function walk(n){
     for(var c=n.firstChild;c;c=c.nextSibling){
       if(c.nodeType===3){
@@ -409,18 +433,19 @@ document.addEventListener('keydown',function(e){
      ((e.metaKey||e.ctrlKey)&&e.key==='Enter')){e.preventDefault();save();}
 });
 
-/* A click on the rendering goes into the text, there. Not a click that ends a
+/* A click on the rendering goes into the text, there, and one in the margin
+   beside it on the nearest line (the X aside). Not a click that ends a
    selection, nor a drag: those were a read. A link is a word like any other;
    with ⌘ held it is a link, and opens in a new tab. */
 var down=null;
-sheet.addEventListener('mousedown',function(e){down=[e.clientX,e.clientY];});
-sheet.addEventListener('click',function(e){
-  if(!viewing||e.button!==0)return;
+overlay.addEventListener('mousedown',function(e){down=[e.clientX,e.clientY];});
+overlay.addEventListener('click',function(e){
+  if(!viewing||e.button!==0||e.target.closest('#zen-close'))return;
   var a=e.target.closest('a[href]'),sel=window.getSelection(),
       moved=down&&Math.abs(e.clientX-down[0])+Math.abs(e.clientY-down[1])>4;
   if(a)e.preventDefault();
   if(a&&(e.metaKey||e.ctrlKey)){window.open(a.href,'_blank','noopener');return;}
-  if(moved||(sel&&!sel.isCollapsed))return;
+  if(drawing||moved||(sel&&!sel.isCollapsed))return;
   toEdit(pointAt(e.clientX,e.clientY));
 });
 

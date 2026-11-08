@@ -27,9 +27,10 @@ window.BlogEditors={
   focused:focused
 };
 
-/* Zen is exempt from everything below. zen.js says in as many words that it has
-   no Escape handler on purpose - a stray Escape while writing must not throw you
-   out - and it has its own save. This is the test it makes on itself. */
+/* Zen is exempt from everything below. A stray Escape while writing must not
+   throw you out of it: in Zen, Escape shows the rendering of the text and
+   nothing more (zen.js). And Zen has its own save. This is the test it makes
+   on itself. */
 function zenOpen(){
   var zen=document.getElementById('zen-overlay');
   return !!(zen&&zen.style.display!=='none');

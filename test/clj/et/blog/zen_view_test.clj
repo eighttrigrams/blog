@@ -10,7 +10,8 @@
 (def ^:private quoted "Words worth quoting.")
 
 ;; Every kind of rewrite the article page makes: a footnote, a divider taken
-;; out, a citation put in, a picture under blog-images/.
+;; out, a citation put in, a picture under blog-images/, an autolink opening in a
+;; new tab and one to an .mp4 becoming a player.
 (def ^:private text
   (str "Intro with **bold** and a [link](https://example.com/x). FOOTNOTE:a\n"
        "\n"
@@ -23,7 +24,9 @@
        "- one\n"
        "- **two**\n"
        "\n"
-       "![pic](blog-images/2/p.jpg)\n"))
+       "![pic](blog-images/2/p.jpg)\n"
+       "\n"
+       "Autolinked <https://example.com/auto> and <https://example.com/clip.mp4>.\n"))
 
 (def ^:private footnotes "FOOTNOTE:a The note itself.")
 
@@ -77,7 +80,10 @@
           (is (str/includes? html "src=\"https://img.example/blog-images/2/p.jpg\"")
               "a picture through the base URL")
           (is (not (str/includes? html "<hr")) "the divider taken out")
-          (is (str/includes? html "target=\"_blank\"") "links open in a new tab"))
+          (is (str/includes? html "target=\"_blank\"") "links open in a new tab")
+          (is (str/includes? html "<a href=\"https://example.com/auto\" target=\"_blank\"")
+              "an autolink too, whose data-pos flexmark writes before href")
+          (is (str/includes? html "<video") "an autolinked .mp4 is a player"))
         (testing "the page itself carries no positions"
           (is (not (str/includes? page "data-pos"))))))))
 

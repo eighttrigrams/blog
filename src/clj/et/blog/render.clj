@@ -25,10 +25,15 @@
     (fn [[_ url]]
       (str "<a href=\"" url "\" target=\"_blank\" rel=\"noopener\""))))
 
+;; An autolink, <https://…>, gets its data-pos *before* href, where the rewrites
+;; that look for `<a href="` would miss it. Behind href, as on every other link.
+(defn- href-first [html]
+  (str/replace html #"<a( data-pos=\"\d+-\d+\")( href=\"[^\"]*\")" "<a$2$1"))
+
 (defn- render-markdown [^HtmlRenderer renderer text]
   (when (and text (not (str/blank? text)))
     (let [doc (.parse md-parser text)]
-      (externalize-links (.render renderer doc)))))
+      (externalize-links (href-first (.render renderer doc))))))
 
 (defn markdown->html [text]
   (render-markdown md-renderer text))
