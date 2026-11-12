@@ -144,9 +144,10 @@ function closest(node,selector){
    and a Note that was only looked at is not written at all. */
 document.addEventListener('keydown',function(e){
   if(!active)return;
+  /* Cmd+9 and nothing else: Cmd+Enter is the editor's "new line above" (the
+     IJKL scheme's Enter meta), and was taken from it here until 2026-11-12. */
   var quit=e.key==='Escape'||
-           (e.metaKey&&(e.code==='Digit9'||e.key==='9'))||
-           ((e.metaKey||e.ctrlKey)&&e.key==='Enter');
+           (e.metaKey&&(e.code==='Digit9'||e.key==='9'));
   if(!quit)return;
   e.preventDefault();
   close();

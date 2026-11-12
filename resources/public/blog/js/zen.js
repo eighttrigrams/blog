@@ -429,8 +429,8 @@ document.addEventListener('keydown',function(e){
      not necessarily arrive as "9", while Digit9 names the physical key whatever
      is held down with it - the rule claude-coordinator's ui/keys.cljs states.
      `e.key` stays accepted so nothing that worked before stops working. */
-  if((e.metaKey&&(e.code==='Digit9'||e.key==='9'))||
-     ((e.metaKey||e.ctrlKey)&&e.key==='Enter')){e.preventDefault();save();}
+  /* Cmd+9 alone since 2026-11-12: Cmd+Enter is the editor's "new line above". */
+  if(e.metaKey&&(e.code==='Digit9'||e.key==='9')){e.preventDefault();save();}
 });
 
 /* A click on the rendering goes into the text, there, and one in the margin

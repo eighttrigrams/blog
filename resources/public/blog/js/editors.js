@@ -63,7 +63,9 @@ function targetForm(){
 
 /* ---- the save chord --------------------------------------------------- */
 
-/* Cmd+9 (and Cmd/Ctrl+Enter) saves the page you are editing, so the answer to
+/* Cmd+9 saves the page you are editing (and only Cmd+9: Cmd/Ctrl+Enter did
+   too until 2026-11-12, which took Cmd+Enter away from the editor, where it is
+   the IJKL scheme's "new line above"), so the answer to
    "does the chord work here?" does not depend on which box you are standing in.
    Zen already had it; the plain edit pages did not, which is the gap this closes.
 
@@ -78,8 +80,7 @@ function targetForm(){
    not fire that event. Submitting the wrong way would post whatever the textarea
    held before the editor mounted - a silent save of stale text. */
 function saveChord(e){
-  return ((e.metaKey||e.ctrlKey)&&e.key==='Enter')||
-         (e.metaKey&&(e.code==='Digit9'||e.key==='9'));
+  return e.metaKey&&(e.code==='Digit9'||e.key==='9');
 }
 
 function submitSave(form){
